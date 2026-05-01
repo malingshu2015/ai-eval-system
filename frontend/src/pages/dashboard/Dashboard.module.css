@@ -1,0 +1,154 @@
+.container {
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+.pageHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: 24px;
+}
+
+/* 统计卡片 */
+.statCard {
+  background: var(--bg-card);
+  border: 1px solid var(--bg-border);
+  border-radius: 20px;
+  padding: 20px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  transition: border-color var(--transition-fast), transform var(--transition-fast);
+  cursor: default;
+}
+
+.statCard:hover {
+  border-color: rgba(37, 99, 235, 0.3);
+  transform: translateY(-2px);
+}
+
+.statIcon {
+  width: 48px;
+  height: 48px;
+  border-radius: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 22px;
+  flex-shrink: 0;
+}
+
+.statBody {
+  flex: 1;
+  min-width: 0;
+}
+
+.statValue {
+  font-size: 28px;
+  font-weight: 700;
+  color: var(--text-primary);
+  line-height: 1.2;
+}
+
+.statTitle {
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin-top: 2px;
+}
+
+.statSub {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-top: 4px;
+}
+
+/* 通用卡片 */
+.card {
+  background: var(--bg-card);
+  border: 1px solid var(--bg-border);
+  border-radius: 20px;
+  padding: 20px;
+}
+
+.cardHeader {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 20px;
+}
+
+/* 风险分布 */
+.riskList {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.riskItem {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.riskLabel {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+/* 评估类型分布 */
+.typeList {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.typeItem {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.typeIcon {
+  font-size: 20px;
+  width: 32px;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+/* 通过率 */
+.passRateContainer {
+  display: flex;
+  align-items: center;
+  justify-content: space-around;
+  padding: 8px 0;
+}
+
+.passRateStats {
+  display: flex;
+  flex-direction: column;
+}
+
+/* 表格样式覆盖 */
+:global(.ant-table) {
+  background: transparent !important;
+}
+
+:global(.ant-table-thead > tr > th) {
+  background: rgba(0, 0, 0, 0.02) !important;
+  color: var(--text-secondary) !important;
+  border-bottom: 1px solid var(--bg-border) !important;
+  font-size: 12px !important;
+}
+
+:global(.ant-table-tbody > tr > td) {
+  border-bottom: 1px solid rgba(0, 0, 0, 0.02) !important;
+}
+
+:global(.ant-table-tbody > tr:hover > td) {
+  background: var(--bg-hover) !important;
+}

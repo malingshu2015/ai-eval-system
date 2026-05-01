@@ -1,0 +1,27 @@
+# Logs
+*.log
+backend/backend_nohup.log
+
+# Node
+node_modules/
+dist/
+dist-ssr/
+*.local
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+backend/venv/
+backend/ai_eval.db
+backend/.env
+
+# OS
+.DS_Store
+
+# IDE
+.vscode/
+.idea/
+
+# Environment
+.env

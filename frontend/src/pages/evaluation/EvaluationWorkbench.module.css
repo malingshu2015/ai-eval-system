@@ -1,0 +1,356 @@
+
+.workbench {
+  display: flex;
+  flex-direction: column;
+  height: calc(100vh - 56px - 48px);
+  overflow: hidden;
+  gap: 20px;
+  background-color: #f4f7fb; /* The premium off-white/grey background */
+  padding: 20px;
+  margin: -24px; /* offset the parent layout padding if necessary */
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 24px;
+  background: #ffffff;
+  border-radius: 20px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.02);
+  flex-shrink: 0;
+}
+
+.main {
+  display: grid;
+  grid-template-columns: 320px 1fr;
+  gap: 24px;
+  flex: 1;
+  overflow: hidden;
+  min-height: 0;
+}
+
+/* ===== 左侧 ===== */
+.sidebar {
+  background: #ffffff;
+  border: none;
+  border-radius: 20px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-shadow: 0 4px 24px rgba(13, 24, 47, 0.04);
+}
+
+.catalog {
+  flex: 1;
+  overflow-y: auto;
+  padding: 12px 0;
+}
+
+.category {
+  margin-bottom: 12px;
+}
+
+.catTitle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 20px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #64748b;
+  background: transparent;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.itemList {
+  display: flex;
+  flex-direction: column;
+}
+
+.itemBtn {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 20px 12px 24px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  border-left: 4px solid transparent;
+  color: #475569;
+}
+
+.itemBtn:hover {
+  background: #f8fafc;
+}
+
+.itemBtnActive {
+  background: #eff6ff !important;
+  border-left-color: #2563eb;
+}
+
+.itemMeta {
+  flex: 1;
+  overflow: hidden;
+}
+
+/* ===== 右侧 ===== */
+.workspace {
+  background: #ffffff;
+  border: none;
+  border-radius: 20px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-shadow: 0 4px 24px rgba(13, 24, 47, 0.04);
+}
+
+.wsHeader {
+  flex-shrink: 0;
+  padding: 32px 40px;
+  border-bottom: 1px solid #f1f5f9;
+  background: #ffffff;
+}
+
+.wsBody {
+  flex: 1;
+  overflow-y: auto;
+  padding: 32px 40px;
+}
+
+/* Tab 切换 */
+.tabs {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 32px;
+  background: #f8fafc;
+  border-radius: 12px;
+  padding: 6px;
+  display: inline-flex;
+}
+
+.tab {
+  padding: 10px 24px;
+  border: none;
+  background: transparent;
+  color: #64748b;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 600;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.tab:hover {
+  color: #0f172a;
+  background: rgba(0,0,0,0.03);
+}
+
+.tabActive {
+  background: #ffffff !important;
+  color: #2563eb !important;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+}
+
+.tabContent {
+  animation: fadeIn 0.4s ease;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* 工具卡片 */
+.toolsGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 20px;
+}
+
+.toolCard {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 16px;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  transition: all 0.3s ease;
+}
+
+.toolCard:hover {
+  border-color: #93c5fd;
+  transform: translateY(-4px);
+  box-shadow: 0 12px 24px rgba(37, 99, 235, 0.08);
+}
+
+.toolCardHeader {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.codeRow {
+  display: flex;
+  align-items: center;
+  background: #f8fafc;
+  border-radius: 8px;
+  padding: 10px 14px;
+  gap: 8px;
+  border: 1px solid #f1f5f9;
+}
+
+.inlineCode {
+  flex: 1;
+  font-family: var(--font-mono, monospace);
+  font-size: 13px;
+  color: #0f172a;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.copyBtn {
+  color: #94a3b8;
+  cursor: pointer;
+  font-size: 15px;
+  transition: color 0.2s ease;
+}
+
+.copyBtn:hover {
+  color: #2563eb;
+}
+
+/* 终端输出框 */
+.terminalArea {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.terminalHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.terminalBody {
+  background: #0f172a;
+  border: none;
+  border-radius: 12px;
+  padding: 24px;
+  min-height: 250px;
+  max-height: 400px;
+  overflow-y: auto;
+  font-family: var(--font-mono, monospace);
+  font-size: 14px;
+  color: #4ade80;
+  line-height: 1.7;
+  box-shadow: inset 0 2px 10px rgba(0,0,0,0.5);
+}
+
+/* 表单与状态组 */
+.formGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 32px;
+}
+
+.formCol {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.statusRadioGroup {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.statusRadioBtn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 20px;
+  border-radius: 100px;
+  border: 1px solid #e2e8f0;
+  background: #ffffff;
+  color: #64748b;
+  cursor: pointer;
+  font-weight: 600;
+  transition: all 0.2s ease;
+}
+
+.statusRadioBtn:hover {
+  background: #f8fafc;
+  border-color: #cbd5e1;
+}
+
+.statusRadioBtnActive {
+  color: #2563eb;
+  border-color: #2563eb;
+  background: #eff6ff;
+  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.1);
+}
+
+/* Ant Design 覆盖 */
+:global(.ant-steps-item-description) {
+  max-width: 100% !important;
+}
+
+:global(.ant-steps-item-title) {
+  color: #0f172a !important;
+  font-weight: 600 !important;
+}
+
+/* 手工测试列表交互样式 */
+.manualStepList {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.manualStepItem {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  padding: 16px 20px;
+  border-radius: 12px;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  transition: all 0.3s ease;
+  cursor: pointer;
+}
+
+.manualStepItem:hover {
+  border-color: #93c5fd;
+  background: #f8fafc;
+  transform: translateX(4px);
+}
+
+.manualStepItem.completed {
+  background: #f0fdf4;
+  border-color: #86efac;
+}
+
+.manualStepIcon {
+  margin-top: 2px;
+  font-size: 20px;
+}
+
+.manualStepContent {
+  flex: 1;
+  color: #334155;
+  line-height: 1.6;
+  font-size: 14px;
+}
+
+.manualStepContent.completedText {
+  color: #166534;
+}
