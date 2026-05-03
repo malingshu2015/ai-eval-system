@@ -16,95 +16,11 @@ import { useNavigate } from 'react-router-dom'
 import styles from './Dashboard.module.css'
 import type { RiskLevel } from '@/types'
 
+import { useQuery } from '@tanstack/react-query'
+import { dashboardApi } from '@/api/dashboard'
+import { Spin, Empty } from 'antd'
+
 const { Title, Text } = Typography
-
-// ---- Mock 数据（Phase 1 接入真实 API 后替换）----
-
-const summaryStats = [
-  {
-    title: '总评估任务',
-    value: 24,
-    icon: <SafetyCertificateOutlined />,
-    color: 'var(--color-primary)',
-    sub: '本月新增 6 个',
-  },
-  {
-    title: '发现的问题',
-    value: 87,
-    icon: <BugOutlined />,
-    color: '#ff3b5c',
-    sub: '较上月 +12',
-  },
-  {
-    title: '已修复',
-    value: 53,
-    icon: <CheckCircleOutlined />,
-    color: '#22c55e',
-    sub: '修复率 60.9%',
-  },
-  {
-    title: '进行中',
-    value: 5,
-    icon: <CloseCircleOutlined />,
-    color: '#ffa500',
-    sub: '3 个待审核',
-  },
-]
-
-const riskDistribution = [
-  { level: 'critical' as RiskLevel, label: '严重', count: 8, color: '#ff3b5c' },
-  { level: 'high' as RiskLevel, label: '高危', count: 23, color: '#ff6b35' },
-  { level: 'medium' as RiskLevel, label: '中危', count: 34, color: '#ffa500' },
-  { level: 'low' as RiskLevel, label: '低危', count: 22, color: '#22c55e' },
-]
-
-const recentFindings = [
-  {
-    key: '1',
-    code: 'A-01',
-    name: '直接越狱指令抵抗测试',
-    target: 'GPT-4o 评估',
-    severity: 'critical' as RiskLevel,
-    status: 'fail',
-    date: '2026-04-21',
-  },
-  {
-    key: '2',
-    code: 'H-03',
-    name: 'SQL 注入测试',
-    target: 'AI 管理后台',
-    severity: 'high' as RiskLevel,
-    status: 'fail',
-    date: '2026-04-20',
-  },
-  {
-    key: '3',
-    code: 'E-02',
-    name: '文件系统越权测试',
-    target: 'Code Agent v2',
-    severity: 'high' as RiskLevel,
-    status: 'fail',
-    date: '2026-04-20',
-  },
-  {
-    key: '4',
-    code: 'B-02',
-    name: '违规信息提供测试',
-    target: 'Claude-3.5 评估',
-    severity: 'medium' as RiskLevel,
-    status: 'pass',
-    date: '2026-04-19',
-  },
-  {
-    key: '5',
-    code: 'J-01',
-    name: 'TLS/SSL 配置检查',
-    target: 'AI 平台前端',
-    severity: 'medium' as RiskLevel,
-    status: 'pass',
-    date: '2026-04-19',
-  },
-]
 
 const SEVERITY_COLOR: Record<RiskLevel, string> = {
   critical: '#ff3b5c',
@@ -120,6 +36,13 @@ const SEVERITY_LABEL: Record<RiskLevel, string> = {
   medium: '中危',
   low: '低危',
   info: '信息',
+}
+
+const ICON_MAP: Record<string, any> = {
+  '总评估任务': <SafetyCertificateOutlined />,
+  '发现的问题': <BugOutlined />,
+  '通过项': <CheckCircleOutlined />,
+  '进行中': <CloseCircleOutlined />,
 }
 
 const columns = [
@@ -166,6 +89,16 @@ const columns = [
 export default function Dashboard() {
   const navigate = useNavigate()
 
+  const { data: stats, isLoading, error } = useQuery({
+    queryKey: ['dashboard-stats'],
+    queryFn: dashboardApi.getStats,
+  })
+
+  if (isLoading) return <div style={{ padding: 100, textAlign: 'center' }}><Spin size="large" /></div>
+  if (error || !stats) return <div style={{ padding: 100 }}><Empty description="无法加载仪表盘统计数据" /></div>
+
+  const { summary, risk_distribution, recent_findings, pass_rate, pass_count, fail_count } = stats
+
   return (
     <div className={styles.container}>
       {/* 页头 */}
@@ -191,11 +124,11 @@ export default function Dashboard() {
 
       {/* 统计卡片 */}
       <Row gutter={[16, 16]} style={{ marginBottom: 24 }}>
-        {summaryStats.map((stat, i) => (
+        {summary.map((stat, i) => (
           <Col xs={24} sm={12} lg={6} key={i}>
             <div className={styles.statCard}>
               <div className={styles.statIcon} style={{ background: `${stat.color}18`, color: stat.color }}>
-                {stat.icon}
+                {ICON_MAP[stat.title] || <SafetyCertificateOutlined />}
               </div>
               <div className={styles.statBody}>
                 <div className={styles.statValue}>{stat.value}</div>
@@ -216,7 +149,7 @@ export default function Dashboard() {
               <span>风险等级分布</span>
             </div>
             <div className={styles.riskList}>
-              {riskDistribution.map((item) => (
+              {risk_distribution.map((item) => (
                 <div key={item.level} className={styles.riskItem}>
                   <div className={styles.riskLabel}>
                     <span
@@ -227,7 +160,7 @@ export default function Dashboard() {
                     <span style={{ color: 'var(--text-secondary)', fontSize: 13 }}>{item.count} 项</span>
                   </div>
                   <Progress
-                    percent={Math.round((item.count / 87) * 100)}
+                    percent={fail_count > 0 ? Math.round((item.count / fail_count) * 100) : 0}
                     strokeColor={item.color}
                     trailColor="var(--bg-border)"
                     showInfo={false}
@@ -248,9 +181,9 @@ export default function Dashboard() {
             </div>
             <div className={styles.typeList}>
               {[
-                { label: 'AI 大模型', count: 10, color: 'var(--color-primary)', icon: '🤖' },
-                { label: 'AI Agent', count: 8, color: '#8b5cf6', icon: '🦾' },
-                { label: 'Web 应用', count: 6, color: '#06b6d4', icon: '🌐' },
+                { label: 'AI 大模型', count: 0, color: 'var(--color-primary)', icon: '🤖' },
+                { label: 'AI Agent', count: 0, color: '#8b5cf6', icon: '🦾' },
+                { label: 'Web 应用', count: 0, color: '#06b6d4', icon: '🌐' },
               ].map((item) => (
                 <div key={item.label} className={styles.typeItem}>
                   <span className={styles.typeIcon}>{item.icon}</span>
@@ -260,7 +193,7 @@ export default function Dashboard() {
                       <Text style={{ color: 'var(--text-secondary)', fontSize: 13 }}>{item.count} 次</Text>
                     </div>
                     <Progress
-                      percent={Math.round((item.count / 24) * 100)}
+                      percent={0}
                       strokeColor={item.color}
                       trailColor="var(--bg-border)"
                       showInfo={false}
@@ -283,7 +216,7 @@ export default function Dashboard() {
             <div className={styles.passRateContainer}>
               <Progress
                 type="circle"
-                percent={61}
+                percent={pass_rate}
                 size={140}
                 strokeColor={{
                   '0%': 'var(--color-primary)',
@@ -298,9 +231,9 @@ export default function Dashboard() {
               />
               <div className={styles.passRateStats}>
                 <Space direction="vertical" size={4}>
-                  <Text style={{ color: '#22c55e', fontSize: 13 }}>✓ 通过 53 项</Text>
-                  <Text style={{ color: '#ef4444', fontSize: 13 }}>✕ 失败 34 项</Text>
-                  <Text style={{ color: 'var(--text-secondary)', fontSize: 13 }}>— 不适用 0 项</Text>
+                  <Text style={{ color: '#22c55e', fontSize: 13 }}>✓ 通过 {pass_count} 项</Text>
+                  <Text style={{ color: '#ef4444', fontSize: 13 }}>✕ 失败 {fail_count} 项</Text>
+                  <Text style={{ color: 'var(--text-secondary)', fontSize: 13 }}>— 待检查</Text>
                 </Space>
               </div>
             </div>
@@ -324,7 +257,7 @@ export default function Dashboard() {
           </Button>
         </div>
         <Table
-          dataSource={recentFindings}
+          dataSource={recent_findings}
           columns={columns}
           pagination={false}
           size="small"

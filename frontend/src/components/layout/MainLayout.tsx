@@ -33,6 +33,11 @@ const menuItems = [
     label: '评估任务',
   },
   {
+    key: '/pentest-hub',
+    icon: <SafetyOutlined />,
+    label: 'AI 渗透中心',
+  },
+  {
     key: '/checklists',
     icon: <CheckSquareOutlined />,
     label: '检查模板库',

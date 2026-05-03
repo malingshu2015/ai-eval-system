@@ -162,3 +162,44 @@ async def update_check_result(
     
     await db.commit()
     return {"message": "success"}
+
+
+@router.patch("/{session_id}", response_model=EvaluationSessionResponse)
+async def update_session(
+    session_id: uuid.UUID,
+    session_in: EvaluationSessionCreate,  # 这里可以复用 Create 的 Schema
+    db: AsyncSession = Depends(get_db)
+):
+    """更新评估会话信息（如名称、URL等）"""
+    stmt = select(EvaluationSession).where(EvaluationSession.id == session_id)
+    res = await db.execute(stmt)
+    session = res.scalars().first()
+    
+    if not session:
+        raise HTTPException(status_code=404, detail="评估会话不存在")
+        
+    session.name = session_in.name
+    if session_in.target_url:
+        session.target_url = session_in.target_url
+    if session_in.target_description:
+        session.target_description = session_in.target_description
+        
+    await db.commit()
+    await db.refresh(session)
+    return session
+
+
+@router.delete("/{session_id}")
+async def delete_session(session_id: uuid.UUID, db: AsyncSession = Depends(get_db)):
+    """删除评估会话及其关联的所有数据"""
+    stmt = select(EvaluationSession).where(EvaluationSession.id == session_id)
+    res = await db.execute(stmt)
+    session = res.scalars().first()
+    
+    if not session:
+        raise HTTPException(status_code=404, detail="评估会话不存在")
+        
+    # NOTE: SQLAlchemy 如果配置了 cascade="all, delete-orphan"，这里删除 session 会自动删除 results
+    await db.delete(session)
+    await db.commit()
+    return {"message": "session deleted"}

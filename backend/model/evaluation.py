@@ -90,3 +90,4 @@ class CheckResult(Base):
     checked_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
 
     session: Mapped["EvaluationSession"] = relationship(back_populates="results")
+    check_item: Mapped["CheckItem"] = relationship() # noqa: F821

@@ -2,7 +2,7 @@
  * 检查工作台 — 重构版
  * 接入后端真实 API，完成 Phase 2 集成
  */
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import {
   Button, Tag, Radio, Input, Upload, Typography,
   Progress, Badge, Divider, Space, message, Steps,
@@ -11,7 +11,7 @@ import {
 import {
   CheckCircleOutlined, CloseCircleOutlined, MinusCircleOutlined,
   QuestionCircleOutlined, ThunderboltOutlined, UploadOutlined,
-  ArrowLeftOutlined, PlayCircleOutlined,
+  ArrowLeftOutlined, PlayCircleOutlined, InfoCircleOutlined,
   CopyOutlined, LinkOutlined, ToolOutlined, OrderedListOutlined,
   SafetyCertificateOutlined,
 } from '@ant-design/icons'
@@ -215,6 +215,9 @@ export default function EvaluationWorkbench() {
   const [activeItemId, setActiveItemId] = useState<string>('')
   const [activeTab, setActiveTab] = useState<'info' | 'terminal' | 'report'>('info')
   const [terminalOutput, setTerminalOutput] = useState<string>('')
+  
+  // 乐观 UI 状态：用于解决点击响应迟钝问题
+  const [localStatus, setLocalStatus] = useState<string | undefined>(undefined)
 
   // 1. 获取会话及结果数据
   const { data: session, isLoading: sessionLoading } = useQuery({
@@ -233,16 +236,34 @@ export default function EvaluationWorkbench() {
   // 展开所有 Item 方便查找
   const allItems = useMemo(() => {
     if (!template) return []
-    return template.categories.flatMap((c) => c.items)
+    return template.categories.flatMap((c) => c.items || [])
   }, [template])
 
-  // 初始化时选择第一项
-  if (!activeItemId && allItems.length > 0) {
-    setActiveItemId(allItems[0].id)
-  }
+  // 初始化时选择第一项 (移入 useEffect 修复渲染副作用)
+  useEffect(() => {
+    if (!activeItemId && allItems.length > 0) {
+      setActiveItemId(allItems[0].id)
+    }
+  }, [activeItemId, allItems])
 
-  const activeItem = allItems.find((i) => i.id === activeItemId)
-  const activeResult = session?.results?.find(r => r.check_item_id === activeItemId)
+  const activeItem = useMemo(() => {
+    if (!activeItemId || !allItems.length) return null
+    return allItems.find((i) => String(i.id) === String(activeItemId))
+  }, [activeItemId, allItems])
+
+  const activeResult = useMemo(() => {
+    if (!activeItemId || !session?.results) return null
+    return session.results.find(r => String(r.check_item_id) === String(activeItemId))
+  }, [activeItemId, session?.results])
+
+  // 当切换检查项时，同步本地状态
+  useEffect(() => {
+    if (activeResult) {
+      setLocalStatus(activeResult.status)
+    } else {
+      setLocalStatus('pending')
+    }
+  }, [activeItemId, activeResult?.status])
 
   const [ws, setWs] = useState<WebSocket | null>(null)
 
@@ -255,18 +276,36 @@ export default function EvaluationWorkbench() {
       ws.close()
     }
 
+    setTerminalOutput(prev => prev + `> [系统] 正在建立与评估引擎的实时连接...\n`)
+
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
     const wsUrl = `${protocol}//${window.location.host}/api/v1/runner/ws`
     const socket = new WebSocket(wsUrl)
     
     const currentItemId = activeItemId;
 
+    // 连接超时处理
+    const timeout = setTimeout(() => {
+      if (socket.readyState !== WebSocket.OPEN) {
+        setTerminalOutput(prev => prev + `> [错误] 连接评估引擎超时，请检查网络或后端状态。\n`)
+        socket.close()
+      }
+    }, 5000)
+
     socket.onopen = () => {
-      setTerminalOutput(prev => prev + `> [系统] 终端连接已建立，下发执行指令...\n`)
+      clearTimeout(timeout)
+      setTerminalOutput(prev => prev + `> [系统] 连接成功！下发评估指令...\n`)
+      // 从 target_description 中提取模型名称（格式: [model:xxx]）
+      const modelMatch = session.target_description?.match(/\[model:([^\]]+)\]/)
+      const modelName = modelMatch ? modelMatch[1] : undefined
+
       socket.send(JSON.stringify({ 
         action: "run", 
         tool_id: toolId,
-        target: session.target_url
+        check_item_id: activeItemId,
+        item_name: activeItem?.name,
+        target: session.target_url || "localhost",
+        model_name: modelName,
       }))
     }
 
@@ -277,12 +316,16 @@ export default function EvaluationWorkbench() {
           setTerminalOutput(prev => prev + `${msg.data}\n`)
         } else if (msg.type === "auto_result") {
           setTerminalOutput(prev => prev + `\n>> [系统] 报告解析完成，自动判定漏洞状态: [${msg.status.toUpperCase()}]\n`)
+          
+          // 核心逻辑：自动更新结果到数据库，并切换到结果页
           evaluationApi.updateResult(sessionId!, currentItemId, {
             status: msg.status,
             raw_output: msg.raw_output
           }).then(() => {
             queryClient.invalidateQueries({ queryKey: ['session', sessionId] })
-            message.success('安全报告已自动解析并回填至表单！')
+            message.success(`实战评估完成！自动判定结论：${msg.status.toUpperCase()}`)
+            // 自动切到结果判读页，让用户直接看到证据
+            setTimeout(() => setActiveTab('report'), 500); 
           })
         } else if (msg.type === "exit") {
           setTerminalOutput(prev => prev + `>> [系统] 进程已退出，返回码: ${msg.code}\n`)
@@ -325,18 +368,39 @@ export default function EvaluationWorkbench() {
     updateMutation.mutate({ status: e.target.value })
   }
 
-  // ===== Loading =====
+  // 进度统计
+  const totalItems = allItems.length
+  const completedItems = session?.results?.filter(r => r.status !== 'pending').length || 0
+  const progressPercent = totalItems === 0 ? 0 : Math.round((completedItems / totalItems) * 100)
+
+  // ===== Hooks 必须放在所有早期 return 之前 =====
+  const hasAutoTools = useMemo(() => {
+    if (!activeItem) return false;
+    let tids: string[] = [];
+    if (activeItem.tool_ids) {
+      try { tids = JSON.parse(activeItem.tool_ids); } catch(e) {}
+    }
+    // 自动追加 AI 评估工具
+    if (session?.target_type === 'llm' || session?.target_type === 'agent') {
+      return true; 
+    }
+    const autoTools = tids.map(tid => ALL_TOOLS[tid]).filter(t => t && t.id !== 'manual');
+    return autoTools.length > 0;
+  }, [activeItem, session?.target_type]);
+
+  useEffect(() => {
+    if (activeTab === 'terminal' && !hasAutoTools) {
+      setActiveTab('info');
+    }
+  }, [activeItemId, hasAutoTools, activeTab]);
+
+  // ===== Loading 早期返回 =====
   if (sessionLoading || templateLoading) {
     return <div style={{ textAlign: 'center', padding: '100px 0' }}><Spin size="large" /></div>
   }
   if (!session || !template) {
     return <Empty description="未能加载评估数据" />
   }
-
-  // 进度统计
-  const totalItems = allItems.length
-  const completedItems = session.results?.filter(r => r.status !== 'pending').length || 0
-  const progressPercent = totalItems === 0 ? 0 : Math.round((completedItems / totalItems) * 100)
 
   return (
     <div className={styles.workbench}>
@@ -389,9 +453,16 @@ export default function EvaluationWorkbench() {
             </div>
             <Progress percent={progressPercent} strokeColor="#5b6ef5" trailColor="rgba(255,255,255,0.1)" size="small" />
           </div>
-          <Button type="primary" style={{ background: '#22c55e' }} onClick={() => navigate('/reports/1')}>
-            生成报告
+          <Button 
+            type="primary" 
+            style={{ background: '#22c55e' }} 
+            onClick={() => window.open(`http://localhost:8000/api/v1/report/${sessionId}/report`, '_blank')}
+          >
+            导出评估报告
           </Button>
+          <div style={{ position: 'absolute', top: 4, right: 20, fontSize: 10, color: 'rgba(0,0,0,0.2)' }}>
+            Debug: ID={activeItemId?.substring(0,6)} | Total={allItems.length} | Found={activeItem ? 'Y' : 'N'}
+          </div>
         </div>
       </div>
 
@@ -472,12 +543,14 @@ export default function EvaluationWorkbench() {
                   >
                     <OrderedListOutlined /> 检查 SOP 指引
                   </div>
-                  <div
-                    className={`${styles.tab} ${activeTab === 'terminal' ? styles.tabActive : ''}`}
-                    onClick={() => setActiveTab('terminal')}
-                  >
-                    <ThunderboltOutlined /> 工具执行终端
-                  </div>
+                  {hasAutoTools && (
+                    <div
+                      className={`${styles.tab} ${activeTab === 'terminal' ? styles.tabActive : ''}`}
+                      onClick={() => setActiveTab('terminal')}
+                    >
+                      <ThunderboltOutlined /> 工具执行终端
+                    </div>
+                  )}
                   <div
                     className={`${styles.tab} ${activeTab === 'report' ? styles.tabActive : ''}`}
                     onClick={() => setActiveTab('report')}
@@ -556,9 +629,54 @@ export default function EvaluationWorkbench() {
                         {terminalOutput ? (
                           <pre style={{ margin: 0, color: '#22c55e', fontFamily: 'monospace' }}>{terminalOutput}</pre>
                         ) : (
-                          <div style={{ color: '#64748b', textAlign: 'center', marginTop: 100 }}>
-                            <ToolOutlined style={{ fontSize: 32, marginBottom: 16, opacity: 0.5 }} />
-                            <p>等待通过 SOP 指引运行自动化工具...</p>
+                          <div style={{ color: '#64748b', textAlign: 'center', marginTop: 60 }}>
+                            {(() => {
+                              let tids: string[] = [];
+                              if (activeItem.tool_ids) {
+                                try { tids = JSON.parse(activeItem.tool_ids); } catch(e) {}
+                              }
+                              // 自动追加 AI 评估工具
+                              if (session.target_type === 'llm' || session.target_type === 'agent') {
+                                ['garak', 'promptfoo', 'pyrit'].forEach(at => {
+                                  if (!tids.includes(at)) tids.push(at);
+                                });
+                              }
+                              
+                              const autoTools = tids.map(tid => ALL_TOOLS[tid]).filter(t => t && t.id !== 'manual');
+                              
+                              if (autoTools.length > 0) {
+                                return (
+                                  <>
+                                    <ThunderboltOutlined style={{ fontSize: 32, marginBottom: 16, color: '#3b82f6', opacity: 0.8 }} />
+                                    <p style={{ marginBottom: 24, fontSize: 16, color: '#334155' }}>检测到此项支持自动化扫描，请选择工具启动：</p>
+                                    <div style={{ display: 'flex', justifyContent: 'center', gap: 12, flexWrap: 'wrap', maxWidth: 600, margin: '0 auto' }}>
+                                      {autoTools.map(tool => (
+                                        <Button
+                                          key={tool.id}
+                                          type="primary"
+                                          icon={<PlayCircleOutlined />}
+                                          onClick={() => handleRunTool(tool.id)}
+                                          style={{ background: '#2563eb' }}
+                                        >
+                                          启动 {tool.name}
+                                        </Button>
+                                      ))}
+                                    </div>
+                                  </>
+                                );
+                              } else {
+                                return (
+                                  <>
+                                    <InfoCircleOutlined style={{ fontSize: 32, marginBottom: 16, opacity: 0.5 }} />
+                                    <p style={{ fontSize: 16, color: '#475569' }}>此检查项目前为 [手动测试] 模式</p>
+                                    <p style={{ maxWidth: 400, margin: '0 auto', color: '#94a3b8' }}>
+                                      请参考左侧 [检查 SOP 指引] 完成人工验证，
+                                      并在 [结果录入] 选项卡中提交您的发现。
+                                    </p>
+                                  </>
+                                );
+                              }
+                            })()}
                           </div>
                         )}
                       </div>
@@ -571,18 +689,23 @@ export default function EvaluationWorkbench() {
                       <div className={styles.statusBox}>
                         <Text style={{ color: '#6b7280', display: 'block', marginBottom: 16 }}>检查结论</Text>
                         <Radio.Group
-                          value={activeResult.status}
-                          onChange={handleStatusChange}
+                          value={localStatus || activeResult.status}
+                          onChange={(e) => {
+                            const newStatus = e.target.value;
+                            setLocalStatus(newStatus); // 1. 立即更新本地 UI
+                            updateMutation.mutate({ status: newStatus }); // 2. 同步后台
+                          }}
                           className={styles.statusRadioGroup}
                         >
                           {(Object.keys(STATUS_CONFIG) as CheckResultStatus[]).map((status) => {
                             const conf = STATUS_CONFIG[status]
+                            const isActive = activeResult.status === status;
                             return (
                               <Radio.Button
                                 key={status}
                                 value={status}
-                                className={`${styles.statusRadioBtn} ${activeResult.status === status ? styles.statusRadioBtnActive : ''}`}
-                                style={activeResult.status === status ? { color: conf.color, borderColor: conf.color, background: `${conf.color}15` } : {}}
+                                className={`${styles.statusRadioBtn} ${isActive ? styles.statusRadioBtnActive : ''}`}
+                                style={isActive ? { color: conf.color, borderColor: conf.color, background: `${conf.color}15`, fontWeight: 600 } : {}}
                               >
                                 {conf.icon} {conf.label}
                               </Radio.Button>
@@ -596,9 +719,14 @@ export default function EvaluationWorkbench() {
                           <Text style={{ color: '#6b7280', display: 'block', marginBottom: 8 }}>工程师备注与分析</Text>
                           <TextArea
                             rows={6}
+                            key={activeItemId} // 使用 key 强制重新渲染，防止 defaultValue 不更新
                             placeholder="描述发现的漏洞细节、复现步骤或判断依据..."
-                            defaultValue={activeResult.notes}
-                            onBlur={(e) => updateMutation.mutate({ notes: e.target.value })}
+                            defaultValue={activeResult.notes || ''}
+                            onBlur={(e) => {
+                              if (e.target.value !== activeResult.notes) {
+                                updateMutation.mutate({ notes: e.target.value });
+                              }
+                            }}
                             style={{ background: '#f1f5f9', borderColor: 'rgba(0,0,0,0.08)', color: '#0f172a' }}
                           />
                         </div>
@@ -620,6 +748,34 @@ export default function EvaluationWorkbench() {
                           </Upload.Dragger>
                         </div>
                       </div>
+
+                      {/* 新增：自动化实战取证日志 */}
+                      {(activeResult.raw_output || terminalOutput) && (
+                        <div style={{ marginTop: 24 }}>
+                          <Text style={{ color: '#6b7280', display: 'block', marginBottom: 8 }}>🛡️ 自动化实战取证日志 (Evidence Logs)</Text>
+                          <div style={{ 
+                            background: '#0f172a', 
+                            padding: '16px', 
+                            borderRadius: '8px', 
+                            border: '1px solid rgba(255,255,255,0.1)',
+                            maxHeight: '400px',
+                            overflowY: 'auto'
+                          }}>
+                            <pre style={{ 
+                              margin: 0, 
+                              color: '#10b981', 
+                              fontSize: '12px', 
+                              fontFamily: '"Fira Code", monospace',
+                              whiteSpace: 'pre-wrap'
+                            }}>
+                              {activeResult.raw_output || terminalOutput}
+                            </pre>
+                          </div>
+                          <Text type="secondary" style={{ fontSize: 12, marginTop: 8, display: 'block' }}>
+                            * 以上日志由评估引擎自动捕获，可作为漏洞定级与修复的原始凭证。
+                          </Text>
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>

@@ -51,4 +51,12 @@ export const evaluationApi = {
   ): Promise<{ message: string }> => {
     return apiClient.patch(`/evaluations/${sessionId}/results/${checkItemId}`, data)
   },
+
+  updateSession: (id: string, data: Partial<EvaluationSession>): Promise<EvaluationSession> => {
+    return apiClient.patch(`/evaluations/${id}`, data)
+  },
+
+  deleteSession: (id: string): Promise<{ message: string }> => {
+    return apiClient.delete(`/evaluations/${id}`)
+  },
 }

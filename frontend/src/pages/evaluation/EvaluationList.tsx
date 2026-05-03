@@ -1,15 +1,11 @@
-/**
- * 评估任务列表页（接入新建评估向导）
- */
 import { useState } from 'react'
-import { Button, Table, Tag, Typography, Space, Input, message, Spin } from 'antd'
-import { PlusOutlined, SearchOutlined, PlayCircleOutlined, FileTextOutlined } from '@ant-design/icons'
+import { Button, Table, Tag, Typography, Space, Input, message, Spin, Popconfirm, Modal, Form, Row, Col, Alert, Select } from 'antd'
+import { PlusOutlined, SearchOutlined, PlayCircleOutlined, EditOutlined, DeleteOutlined } from '@ant-design/icons'
 import { useNavigate } from 'react-router-dom'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useMutation } from '@tanstack/react-query'
 import dayjs from 'dayjs'
 import NewEvaluationModal from './NewEvaluationModal'
 import { evaluationApi, type EvaluationSession } from '@/api/evaluation'
-import type { TargetType, SessionStatus } from '@/types'
 
 const { Title, Text } = Typography
 
@@ -31,22 +27,47 @@ const STATUS_CONFIG: Record<string, { label: string; color: string }> = {
 export default function EvaluationList() {
   const navigate = useNavigate()
   const [modalOpen, setModalOpen] = useState(false)
+  const [editModalOpen, setEditModalOpen] = useState(false)
+  const [editingSession, setEditingSession] = useState<EvaluationSession | null>(null)
   const [searchText, setSearchText] = useState('')
+  const [form] = Form.useForm()
 
   const { data: sessions, isLoading, refetch } = useQuery({
     queryKey: ['evaluations'],
     queryFn: evaluationApi.getSessions,
   })
 
+  // 删除任务
+  const deleteMutation = useMutation({
+    mutationFn: evaluationApi.deleteSession,
+    onSuccess: () => {
+      message.success('任务已成功删除')
+      refetch()
+    },
+    onError: () => message.error('删除失败，请稍后重试')
+  })
+
+  // 更新任务
+  const updateMutation = useMutation({
+    mutationFn: ({ id, data }: { id: string, data: Partial<EvaluationSession> }) => 
+      evaluationApi.updateSession(id, data),
+    onSuccess: () => {
+      message.success('任务已更新')
+      setEditModalOpen(false)
+      refetch()
+    },
+    onError: () => message.error('更新失败')
+  })
+
   const filtered = (sessions || []).filter((s) =>
-    s.name.toLowerCase().includes(searchText.toLowerCase())
+    (s.name || '').toLowerCase().includes(searchText.toLowerCase())
   )
 
   const columns = [
     {
       title: '评估名称',
       dataIndex: 'name',
-      render: (v: string) => <Text style={{ color: 'var(--text-primary)', fontWeight: 500 }}>{v}</Text>,
+      render: (v: string) => <Text style={{ color: 'var(--text-primary)', fontWeight: 500 }}>{v || '未命名任务'}</Text>,
     },
     {
       title: '对象类型',
@@ -81,8 +102,9 @@ export default function EvaluationList() {
     },
     {
       title: '操作',
+      width: 220,
       render: (_: unknown, record: EvaluationSession) => (
-        <Space>
+        <Space size="middle">
           <Button
             type="link"
             size="small"
@@ -92,17 +114,46 @@ export default function EvaluationList() {
           >
             工作台
           </Button>
-          {record.status === 'completed' && (
+          <Button
+            type="link"
+            size="small"
+            icon={<EditOutlined />}
+            style={{ color: '#faad14', padding: 0 }}
+            onClick={() => {
+              setEditingSession(record)
+              // 完整回填所有字段，确保编辑时数据不丢失
+              form.setFieldsValue({ 
+                name: record.name,
+                target_type: record.target_type,
+                target_url: record.target_url,
+                target_description: record.target_description
+              })
+              setEditModalOpen(true)
+            }}
+          >
+            编辑
+          </Button>
+          <Popconfirm
+            title="确定要删除此任务吗？"
+            description="删除后，相关的评估结果和记录将无法恢复。"
+            onConfirm={() => {
+              console.log('确认删除任务:', record.id);
+              deleteMutation.mutate(record.id);
+            }}
+            okText="确定删除"
+            cancelText="取消"
+            okButtonProps={{ danger: true, loading: deleteMutation.isPending }}
+          >
             <Button
               type="link"
               size="small"
-              icon={<FileTextOutlined />}
-              style={{ color: '#22c55e', padding: 0 }}
-              onClick={() => navigate(`/reports/${record.id}`)}
+              danger
+              icon={<DeleteOutlined />}
+              style={{ padding: 0 }}
             >
-              报告
+              删除
             </Button>
-          )}
+          </Popconfirm>
         </Space>
       ),
     },
@@ -161,6 +212,86 @@ export default function EvaluationList() {
           navigate(`/evaluations/${id}`)
         }}
       />
+
+      {/* 编辑 Modal */}
+      <Modal
+        title={
+          <Space>
+            <EditOutlined style={{ color: 'var(--color-primary)' }} />
+            <span>修改评估任务配置</span>
+          </Space>
+        }
+        open={editModalOpen}
+        onCancel={() => setEditModalOpen(false)}
+        onOk={() => {
+          form.validateFields().then(values => {
+            if (editingSession) {
+              updateMutation.mutate({ id: editingSession.id, data: values })
+            }
+          })
+        }}
+        confirmLoading={updateMutation.isPending}
+        width={560}
+        okText="保存修改"
+        cancelText="取消"
+      >
+        <div style={{ marginBottom: 20 }}>
+          <Alert 
+            message="提示" 
+            description="修改任务基本信息不会影响已经生成的检查项。如果需要更换检查模板，请创建新的评估任务。" 
+            type="info" 
+            showIcon 
+          />
+        </div>
+        <Form form={form} layout="vertical">
+          <Form.Item
+            name="name"
+            label={<Text strong>评估任务名称</Text>}
+            rules={[{ required: true, message: '请输入评估名称' }]}
+          >
+            <Input placeholder="例如：某系统 Q3 安全合规评估" />
+          </Form.Item>
+
+          <Row gutter={16}>
+            <Col span={12}>
+              <Form.Item
+                name="target_type"
+                label={<Text strong>评估对象类型</Text>}
+                rules={[{ required: true }]}
+              >
+                <Select>
+                  {Object.entries(TARGET_TYPE_CONFIG).map(([key, cfg]) => (
+                    <Select.Option key={key} value={key}>
+                      <Space>
+                        <span>{cfg.icon}</span>
+                        {cfg.label}
+                      </Space>
+                    </Select.Option>
+                  ))}
+                </Select>
+              </Form.Item>
+            </Col>
+            <Col span={12}>
+              <Form.Item
+                name="target_url"
+                label={<Text strong>目标 URL / Endpoint</Text>}
+              >
+                <Input placeholder="https://api.example.com" />
+              </Form.Item>
+            </Col>
+          </Row>
+
+          <Form.Item
+            name="target_description"
+            label={<Text strong>目标详细描述</Text>}
+          >
+            <Input.TextArea 
+              rows={4} 
+              placeholder="请描述该评估目标的业务背景、核心功能以及需要重点关注的安全合规点..." 
+            />
+          </Form.Item>
+        </Form>
+      </Modal>
     </div>
   )
 }

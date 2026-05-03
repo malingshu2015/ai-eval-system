@@ -11,6 +11,7 @@ import MainLayout from '@/components/layout/MainLayout'
 import Dashboard from '@/pages/dashboard/Dashboard'
 import EvaluationList from '@/pages/evaluation/EvaluationList'
 import EvaluationWorkbench from '@/pages/evaluation/EvaluationWorkbench'
+import PentestHub from '@/pages/evaluation/PentestHub'
 import ChecklistLibrary from '@/pages/checklist/ChecklistLibrary'
 import Reports from '@/pages/reports/Reports'
 import ReportDetail from '@/pages/reports/ReportDetail'
@@ -91,6 +92,7 @@ export default function App() {
                 <Route path="checklists" element={<ChecklistLibrary />} />
                 <Route path="reports" element={<Reports />} />
                 <Route path="reports/:id" element={<ReportDetail />} />
+                <Route path="pentest-hub" element={<PentestHub />} />
               </Route>
             </Routes>
           </BrowserRouter>

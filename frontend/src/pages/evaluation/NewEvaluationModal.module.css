@@ -1,36 +1,67 @@
-.modalInner { display: flex; flex-direction: column; }
+.modalInner { 
+  display: flex; 
+  flex-direction: column; 
+  background: #ffffff;
+}
 
 .modalHeader {
-  padding: 24px 24px 0;
-  border-bottom: 1px solid rgba(255,255,255,0.08);
-  padding-bottom: 16px;
+  padding: 24px 32px 20px;
+  border-bottom: 1px solid #f1f5f9;
+  background: #ffffff;
 }
 
 .stepsWrap {
-  padding: 20px 24px 0;
+  padding: 24px 32px 0;
 }
 
 .stepContent {
-  padding: 20px 24px;
-  min-height: 300px;
+  padding: 24px 32px;
+  min-height: 380px;
 }
 
 /* 类型选择卡片 */
-.typeGrid { display: flex; flex-direction: column; gap: 10px; }
+.typeGrid { 
+  display: flex; 
+  flex-direction: column; 
+  gap: 12px; 
+}
 
 .typeCard {
   display: flex;
   align-items: center;
-  gap: 16px;
-  padding: 16px;
-  background: rgba(255,255,255,0.03);
-  border: 1px solid rgba(255,255,255,0.08);
-  border-radius: 10px;
+  gap: 20px;
+  padding: 18px 24px;
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
   cursor: pointer;
-  transition: all 150ms ease;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
 }
-.typeCard:hover { background: rgba(255,255,255,0.06); border-color: rgba(255,255,255,0.15); }
-.typeCardActive { border-width: 1.5px !important; }
+
+.typeCard:hover {
+  background: #f8fafc;
+  border-color: #cbd5e1;
+  transform: translateY(-1px);
+}
+
+.typeCardActive {
+  background: #f0f7ff !important;
+  border-color: #3b82f6 !important;
+  border-width: 1px !important;
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.08);
+}
+
+.typeCardActive::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+  background: #3b82f6;
+  border-radius: 12px 0 0 12px;
+}
 
 .typeIcon {
   width: 56px;
@@ -40,23 +71,40 @@
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
+  transition: all 0.2s ease;
+  font-size: 24px;
+}
+
+.typeCardActive .typeIcon {
+  background: #3b82f6 !important;
+  color: white !important;
 }
 
 /* 模板列表 */
-.templateList { display: flex; flex-direction: column; gap: 10px; }
+.templateList { 
+  display: flex; 
+  flex-direction: column; 
+  gap: 10px; 
+}
 
 .templateCard {
-  padding: 14px 16px;
-  background: rgba(255,255,255,0.03);
-  border: 1px solid rgba(255,255,255,0.08);
+  padding: 16px 20px;
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
   border-radius: 10px;
   cursor: pointer;
-  transition: all 150ms ease;
+  transition: all 0.2s ease;
 }
-.templateCard:hover { background: rgba(255,255,255,0.06); }
+
+.templateCard:hover {
+  background: #f8fafc;
+  border-color: #cbd5e1;
+}
+
 .templateCardActive {
-  border-color: #5b6ef5 !important;
-  background: rgba(91,110,245,0.08) !important;
+  border-color: #3b82f6 !important;
+  background: #f0f7ff !important;
+  box-shadow: 0 2px 8px rgba(59, 130, 246, 0.05);
 }
 
 /* 底部按钮区 */
@@ -64,6 +112,19 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 16px 24px;
-  border-top: 1px solid rgba(255,255,255,0.08);
+  padding: 20px 32px;
+  border-top: 1px solid #f1f5f9;
+  background: #f8fafc;
+  border-radius: 0 0 12px 12px;
+}
+
+/* 表单组件适配 */
+:global(.ant-input), :global(.ant-input-password), :global(.ant-select-selector) {
+  border-radius: 6px !important;
+  border-color: #d1d5db !important;
+}
+
+:global(.ant-form-item-label label) {
+  color: #374151 !important;
+  font-weight: 500 !important;
 }
