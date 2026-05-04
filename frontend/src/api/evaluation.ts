@@ -1,9 +1,9 @@
 import apiClient from './client'
-import type { CheckResultStatus } from '@/types'
+import type { CheckResultStatus, TargetType } from '@/types'
 
 export interface CreateSessionDto {
   name: string
-  target_type: 'llm' | 'agent' | 'webapp'
+  target_type: TargetType
   target_url?: string
   target_description?: string
   template_id: string
@@ -23,8 +23,10 @@ export interface CheckResult {
 export interface EvaluationSession {
   id: string
   name: string
-  target_type: 'llm' | 'agent' | 'webapp'
+  target_type: TargetType
   target_url?: string
+  target_description?: string
+  score?: number
   status: 'draft' | 'in_progress' | 'completed' | 'archived'
   template_id: string
   created_at: string

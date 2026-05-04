@@ -13,7 +13,8 @@ import {
 } from '@ant-design/icons'
 import { useNavigate, useParams } from 'react-router-dom'
 import type { RiskLevel, CheckResultStatus } from '@/types'
-import { getPentestReport, type PentestReportFinding } from '@/utils/pentestReports'
+import { getPentestReport, getReportEvidence, getReportFindings, getReportReview } from '@/utils/pentestReports'
+import type { EvidenceStatus, Finding, Severity } from '@/types/domain'
 import { resolveReportTemplate, type ReportTemplateId } from '@/utils/reportTemplates'
 import styles from './ReportDetail.module.css'
 
@@ -231,27 +232,39 @@ function parseReportContent(content: string): ParsedReportSection[] {
   return sections.filter((section) => section.blocks.length > 0)
 }
 
-function pentestSeverityLabel(level: string) {
-  if (level === 'error') return '高危'
-  if (level === 'warning') return '中危'
+function pentestSeverityLabel(severity: Severity) {
+  if (severity === 'critical') return '严重'
+  if (severity === 'high') return '高危'
+  if (severity === 'medium') return '中危'
+  if (severity === 'low') return '低危'
   return '信息'
 }
 
-function pentestSeverityColor(level: string) {
-  if (level === 'error') return '#ff3b5c'
-  if (level === 'warning') return '#ffa500'
+function pentestSeverityColor(severity: Severity) {
+  if (severity === 'critical') return '#ff3b5c'
+  if (severity === 'high') return '#ff6b35'
+  if (severity === 'medium') return '#ffa500'
+  if (severity === 'low') return '#22c55e'
   return '#64748b'
 }
 
-function evidenceLabel(confidence?: string) {
-  const labels: Record<string, string> = {
-    TOOL_BASED: '工具验证',
-    TOOL_VERIFIABLE: '可验证',
-    AI_INFERRED: '待人工确认',
-    AI_ONLY: '仅 AI 推断',
-    MEDIUM: '分析报告',
+function evidenceStatusLabel(status: EvidenceStatus) {
+  const labels: Record<EvidenceStatus, string> = {
+    verified: '证据已验证',
+    partial: '证据待补充',
+    missing: '缺少证据',
   }
-  return confidence ? labels[confidence] || confidence : '未标注'
+  return labels[status]
+}
+
+function sourceLabel(source: Finding['source']) {
+  const labels: Record<Finding['source'], string> = {
+    tool: '真实工具结果',
+    ai_inferred: 'AI 推断',
+    manual: '人工录入',
+    demo: '演示数据',
+  }
+  return labels[source]
 }
 
 function compactWhitespace(text: string) {
@@ -280,7 +293,7 @@ function truncateText(text: string, maxLength: number) {
   return `${cleaned.slice(0, maxLength).replace(/[，。、；：,\s]+$/, '')}...`
 }
 
-function extractFindingTitle(finding: PentestReportFinding, index: number) {
+function extractFindingTitle(finding: Finding, index: number) {
   const source = sanitizeReportSnippet(finding.title)
   const explicitRisk = source.match(/(?:严重|高危险|高风险|高危|中风险|中危|低风险|信息)\s*[-:：]\s*([^#。；\n|]{4,36})/)
   if (explicitRisk?.[1]) {
@@ -312,12 +325,11 @@ function fallbackFindingSummary(title: string) {
   return `发现 ${title}，建议补齐可复验证据后纳入正式整改流程。`
 }
 
-function extractFindingSummary(finding: PentestReportFinding) {
+function extractFindingSummary(finding: Finding) {
   const title = extractFindingTitle(finding, 0)
   const candidates = [
     finding.description,
-    finding.evidence?.note,
-    finding.evidence?.supporting_data,
+    finding.remediationAdvice,
     finding.title,
   ]
 
@@ -329,15 +341,16 @@ function extractFindingSummary(finding: PentestReportFinding) {
   return truncateText(summary || fallbackFindingSummary(title), 128)
 }
 
-function findingPriorityLabel(level: string, index: number) {
-  if (level === 'error' || index < 3) return '立即处理'
-  if (level === 'warning') return '本周排期'
+function findingPriorityLabel(severity: Severity, index: number) {
+  if (['critical', 'high'].includes(severity) || index < 3) return '立即处理'
+  if (severity === 'medium') return '本周排期'
   return '持续观察'
 }
 
-function findingActionText(finding: PentestReportFinding, index: number) {
-  if (finding.level === 'error' || index < 3) return '先限制暴露面，再复测确认'
-  if (finding.level === 'warning') return '补齐证据并纳入修复计划'
+function findingActionText(finding: Finding, index: number) {
+  if (finding.remediationAdvice) return finding.remediationAdvice
+  if (['critical', 'high'].includes(finding.severity) || index < 3) return '先限制暴露面，再复测确认'
+  if (finding.severity === 'medium') return '补齐证据并纳入修复计划'
   return '记录基线，随下次扫描复核'
 }
 
@@ -354,17 +367,21 @@ export default function ReportDetail() {
 
   if (pentestReport) {
     const riskScore = Math.min(100, pentestReport.critical * 30 + pentestReport.high * 15 + pentestReport.medium * 6)
-    const sortedFindings = [...pentestReport.findings].sort((a, b) => {
-      const weight: Record<string, number> = { error: 3, warning: 2 }
-      return (weight[b.level] || 1) - (weight[a.level] || 1)
+    const structuredFindings = getReportFindings(pentestReport)
+    const structuredEvidence = getReportEvidence(pentestReport)
+    const structuredReview = getReportReview(pentestReport)
+    const sortedFindings = [...structuredFindings].sort((a, b) => {
+      const weight: Record<Severity, number> = { critical: 5, high: 4, medium: 3, low: 2, info: 1 }
+      return weight[b.severity] - weight[a.severity]
     })
     const highPriorityFindings = sortedFindings.slice(0, 8)
     const presentableFindings = highPriorityFindings.map((finding, index) => ({
       finding,
       title: extractFindingTitle(finding, index),
       summary: extractFindingSummary(finding),
-      priority: findingPriorityLabel(finding.level, index),
+      priority: findingPriorityLabel(finding.severity, index),
       action: findingActionText(finding, index),
+      evidenceCount: structuredEvidence.filter((evidence) => evidence.findingId === finding.id).length,
     }))
 
     return (
@@ -404,8 +421,8 @@ export default function ReportDetail() {
             <div className={styles.executiveConclusion}>
               <h2>总体结论</h2>
               <p>
-                本次扫描共发现 {pentestReport.findings.length} 项风险，其中高优先级风险 {pentestReport.critical + pentestReport.high} 项。
-                {pentestReport.review ? ` ${pentestReport.review.conclusion}` : ' 建议优先复核高危发现并补充原始证据。'}
+                本次扫描共发现 {structuredFindings.length} 项结构化风险，其中高优先级风险 {pentestReport.critical + pentestReport.high} 项。
+                {structuredReview ? ` ${structuredReview.conclusion}` : ' 建议优先复核高危发现并补充原始证据。'}
               </p>
               <div className={styles.priorityStrip}>
                 <span>优先处理：开放管理面、未加密服务、可验证高危项</span>
@@ -430,39 +447,61 @@ export default function ReportDetail() {
             <div><span>安全评分</span><strong>{pentestReport.passRate}%</strong></div>
           </section>
 
-          {pentestReport.review && (
+          {structuredReview && (
             <section className={styles.reviewBlock}>
               <div className={styles.blockTitle}>审核官复核</div>
               <div className={styles.reviewStats}>
-                <Tag color={pentestReport.review.overallConfidence === 'high' ? 'green' : pentestReport.review.overallConfidence === 'medium' ? 'orange' : 'red'}>
-                  {pentestReport.review.overallConfidence === 'high' ? '高可信' : pentestReport.review.overallConfidence === 'medium' ? '中可信' : '低可信'}
+                <Tag color={structuredReview.overallConfidence === 'high' ? 'green' : structuredReview.overallConfidence === 'medium' ? 'orange' : 'red'}>
+                  {structuredReview.overallConfidence === 'high' ? '高可信' : structuredReview.overallConfidence === 'medium' ? '中可信' : '低可信'}
                 </Tag>
-                <Tag color="green">通过 {pentestReport.review.verified}</Tag>
-                <Tag color="orange">待确认 {pentestReport.review.needsReview}</Tag>
-                <Tag color="red">驳回 {pentestReport.review.rejected}</Tag>
+                <Tag color="green">通过 {structuredReview.verifiedFindingIds.length}</Tag>
+                <Tag color="orange">待确认 {structuredReview.needsReviewFindingIds.length}</Tag>
+                <Tag color="red">驳回 {structuredReview.rejectedFindingIds.length}</Tag>
               </div>
-              <p>{pentestReport.review.conclusion}</p>
+              <p>{structuredReview.conclusion}</p>
             </section>
           )}
 
           <section className={styles.reportBlock}>
             <div className={styles.blockTitle}>核心发现</div>
             <div className={styles.findingCards}>
-              {presentableFindings.map(({ finding, title, summary, priority, action }, index) => (
+              {presentableFindings.map(({ finding, title, summary, priority, action, evidenceCount }, index) => (
                 <div className={styles.findingCard} key={finding.id}>
                   <div className={styles.findingIndex}>{String(index + 1).padStart(2, '0')}</div>
                   <div className={styles.findingMain}>
                     <div className={styles.findingCardHeader}>
                       <strong>{title}</strong>
-                      <Tag color={pentestSeverityColor(finding.level)}>{pentestSeverityLabel(finding.level)}</Tag>
+                      <Tag color={pentestSeverityColor(finding.severity)}>{pentestSeverityLabel(finding.severity)}</Tag>
                     </div>
                     <p>{summary}</p>
                     <div className={styles.findingMeta}>
-                      <span>证据：{evidenceLabel(finding.evidence?.confidence)}</span>
+                      <span>来源：{sourceLabel(finding.source)}</span>
+                      <span>证据：{evidenceStatusLabel(finding.evidenceStatus)} · {evidenceCount} 条</span>
+                      <span>复核：{finding.reviewStatus === 'verified' ? '已确认' : finding.reviewStatus === 'rejected' ? '已驳回' : '待确认'}</span>
                       <span>建议：{action}</span>
                     </div>
                   </div>
                   <div className={styles.findingPriority}>{priority}</div>
+                </div>
+              ))}
+            </div>
+          </section>
+
+          <section className={styles.reportBlock}>
+            <div className={styles.blockTitle}>结构化证据链</div>
+            <div className={styles.evidenceList}>
+              {structuredEvidence.slice(0, 6).map((evidence) => (
+                <div className={styles.evidenceItem} key={evidence.id}>
+                  <div>
+                    <strong>{evidence.summary}</strong>
+                    <p>{truncateText(sanitizeReportSnippet(evidence.rawContent), 120)}</p>
+                  </div>
+                  <div className={styles.evidenceTags}>
+                    <Tag>{evidence.type}</Tag>
+                    <Tag color={evidence.confidence === 'high' ? 'green' : evidence.confidence === 'medium' ? 'orange' : 'red'}>
+                      {evidence.confidence === 'high' ? '高可信' : evidence.confidence === 'medium' ? '中可信' : '低可信'}
+                    </Tag>
+                  </div>
                 </div>
               ))}
             </div>

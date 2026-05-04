@@ -528,6 +528,40 @@
   white-space: nowrap;
 }
 
+.evidenceList {
+  display: grid;
+  gap: 10px;
+}
+
+.evidenceItem {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 14px;
+  align-items: start;
+  padding: 14px 16px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+}
+
+.evidenceItem strong {
+  color: var(--text-primary);
+}
+
+.evidenceItem p {
+  margin: 6px 0 0;
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.7;
+}
+
+.evidenceTags {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
 .actionPlan {
   display: grid;
   gap: 12px;
@@ -615,6 +649,14 @@
 
   .findingPriority {
     justify-self: start;
+  }
+
+  .evidenceItem {
+    grid-template-columns: 1fr;
+  }
+
+  .evidenceTags {
+    justify-content: flex-start;
   }
 
   .kpiRow {
