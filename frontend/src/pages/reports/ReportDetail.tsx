@@ -366,6 +366,7 @@ export default function ReportDetail() {
   const highCount = findings.filter((f) => f.severity === 'high').length
 
   if (pentestReport) {
+    const reportTemplate = resolveReportTemplate('webapp', pentestReport.reportTemplate)
     const riskScore = Math.min(100, pentestReport.critical * 30 + pentestReport.high * 15 + pentestReport.medium * 6)
     const structuredFindings = getReportFindings(pentestReport)
     const structuredEvidence = getReportEvidence(pentestReport)
@@ -414,6 +415,7 @@ export default function ReportDetail() {
               <div><span>生成时间</span><strong>{pentestReport.generatedAt}</strong></div>
               <div><span>模型</span><strong>{pentestReport.model}</strong></div>
               <div><span>参与 Agent</span><strong>{pentestReport.agents.join('、')}</strong></div>
+              <div><span>报告模板</span><strong>{reportTemplate.name} · v{pentestReport.reportVersion || 1}</strong></div>
             </div>
           </header>
 
@@ -445,6 +447,30 @@ export default function ReportDetail() {
             <div><span>高危</span><strong>{pentestReport.high}</strong></div>
             <div><span>中低风险</span><strong>{pentestReport.medium}</strong></div>
             <div><span>安全评分</span><strong>{pentestReport.passRate}%</strong></div>
+          </section>
+
+          <section className={styles.reportBlock}>
+            <div className={styles.blockTitle}>报告模板结构</div>
+            <div className={styles.templateOverview}>
+              <div className={styles.templateSummary}>
+                <strong>{reportTemplate.name}</strong>
+                <p>{reportTemplate.description}</p>
+                <div>
+                  {reportTemplate.requiredData.map((item) => <Tag key={item}>{item}</Tag>)}
+                </div>
+              </div>
+              <div className={styles.templateSections}>
+                {reportTemplate.sections.map((section, index) => (
+                  <div key={section.key}>
+                    <span>{String(index + 1).padStart(2, '0')}</span>
+                    <div>
+                      <strong>{section.title}</strong>
+                      <p>{section.description}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
           </section>
 
           {structuredReview && (
@@ -624,6 +650,7 @@ export default function ReportDetail() {
                     ['评估对象', mockPresentation.targetDesc],
                     ['检查模板', mockPresentation.template],
                     ['报告模板', mockReportTemplate.name],
+                    ['报告版本', 'v1'],
                     ['评估人员', MOCK_REPORT.assessor],
                     ['完成时间', MOCK_REPORT.completedAt],
                     ['检查项总数', `${stats.total} 项`],
@@ -648,7 +675,7 @@ export default function ReportDetail() {
               )}
               <Alert
                 message={mockReportTemplate.name}
-                description={mockPresentation.summary}
+                description={`${mockPresentation.summary} 必填数据：${mockReportTemplate.requiredData.join('、')}`}
                 type="info"
                 showIcon
                 style={{ marginTop: 16, background: '#f8fafc', border: '1px solid #e5e7eb' }}

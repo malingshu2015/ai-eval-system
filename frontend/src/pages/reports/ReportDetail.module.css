@@ -433,6 +433,70 @@
   border-bottom: 1px solid var(--bg-border);
 }
 
+.templateOverview {
+  display: grid;
+  grid-template-columns: minmax(240px, 0.8fr) minmax(0, 1.2fr);
+  gap: 16px;
+}
+
+.templateSummary {
+  padding: 16px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+}
+
+.templateSummary strong {
+  color: var(--text-primary);
+  font-size: 15px;
+}
+
+.templateSummary p {
+  margin: 8px 0 12px;
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.7;
+}
+
+.templateSections {
+  display: grid;
+  gap: 8px;
+}
+
+.templateSections > div {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr);
+  gap: 10px;
+  padding: 12px;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+}
+
+.templateSections span {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  color: #2563eb;
+  background: #eff6ff;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.templateSections strong {
+  color: var(--text-primary);
+}
+
+.templateSections p {
+  margin: 4px 0 0;
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
 .reviewStats {
   display: flex;
   flex-wrap: wrap;
@@ -643,6 +707,7 @@
 
   .standardReportHeader,
   .executiveGrid,
+  .templateOverview,
   .findingCard {
     grid-template-columns: 1fr;
   }
