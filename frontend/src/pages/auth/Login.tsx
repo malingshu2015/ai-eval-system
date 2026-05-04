@@ -5,7 +5,7 @@ import { Form, Input, Button, Typography, message } from 'antd'
 import { UserOutlined, LockOutlined, SafetyOutlined } from '@ant-design/icons'
 import { useNavigate } from 'react-router-dom'
 import { useAuthStore } from '@/stores/authStore'
-import type { User } from '@/types'
+import { authenticateLocalAccount } from '@/utils/localAccounts'
 
 const { Title, Text } = Typography
 
@@ -14,16 +14,12 @@ export default function Login() {
   const { login } = useAuthStore()
 
   const handleSubmit = (values: { username: string; password: string }) => {
-    // TODO: 替换为真实 API 调用
-    if (values.username === 'admin' && values.password === 'admin123') {
-      const mockUser: User = {
-        id: '1', username: 'admin', email: 'admin@example.com',
-        role: 'super_admin', isActive: true, createdAt: new Date().toISOString(),
-      }
-      login('mock-jwt-token', mockUser)
+    const user = authenticateLocalAccount(values.username, values.password)
+    if (user) {
+      login(`local-token-${user.id}`, user)
       navigate('/dashboard')
     } else {
-      message.error('用户名或密码错误')
+      message.error('用户名、密码错误或账号已禁用')
     }
   }
 
@@ -49,7 +45,7 @@ export default function Login() {
           <Form.Item name="username" rules={[{ required: true, message: '请输入用户名' }]}>
             <Input
               prefix={<UserOutlined style={{ color: '#5a6080' }} />}
-              placeholder="用户名（admin）"
+              placeholder="用户名"
               size="large"
               style={{ background: 'var(--bg-hover)', borderColor: 'var(--bg-border)', color: 'var(--text-primary)' }}
             />
@@ -57,7 +53,7 @@ export default function Login() {
           <Form.Item name="password" rules={[{ required: true, message: '请输入密码' }]}>
             <Input.Password
               prefix={<LockOutlined style={{ color: '#5a6080' }} />}
-              placeholder="密码（admin123）"
+              placeholder="密码"
               size="large"
               style={{ background: 'var(--bg-hover)', borderColor: 'var(--bg-border)', color: 'var(--text-primary)' }}
             />

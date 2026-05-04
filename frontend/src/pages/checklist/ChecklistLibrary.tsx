@@ -6,6 +6,7 @@ import { Typography, Tag, Button, Row, Col, Spin, Empty, Drawer, List, Collapse,
 import { PlusOutlined } from '@ant-design/icons'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { checklistApi, type ChecklistTemplate } from '@/api/checklist'
+import { getRecommendedReportTemplate } from '@/utils/reportTemplates'
 
 const { Title, Text } = Typography
 
@@ -128,6 +129,7 @@ export default function ChecklistLibrary() {
         <Row gutter={[16, 16]}>
           {templates.map((t) => {
             const count = t.categories.reduce((acc, cat) => acc + cat.items.length, 0)
+            const reportTemplate = getRecommendedReportTemplate(t.target_type)
             return (
               <Col xs={24} md={12} lg={8} key={t.id}>
                 <div style={{ background: 'var(--bg-card)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 10, padding: 20, height: '100%', display: 'flex', flexDirection: 'column' }}>
@@ -137,6 +139,10 @@ export default function ChecklistLibrary() {
                   </div>
                   <Title level={5} style={{ color: 'var(--text-primary)', margin: '0 0 8px' }}>{t.name}</Title>
                   <Text style={{ color: 'var(--text-secondary)', fontSize: 13, flex: 1 }}>{t.description}</Text>
+                  <div style={{ marginTop: 14, padding: '10px 12px', background: '#f8fafc', border: '1px solid #e5e7eb', borderRadius: 8 }}>
+                    <Text style={{ color: '#475569', fontSize: 12, display: 'block' }}>默认报告模板</Text>
+                    <Text style={{ color: 'var(--text-primary)', fontSize: 13, fontWeight: 600 }}>{reportTemplate.name}</Text>
+                  </div>
                   
                   <div style={{ marginTop: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <Text style={{ color: 'var(--color-primary)', fontSize: 13 }}>{t.categories.length} 个分类 · {count} 个检查项</Text>
@@ -168,6 +174,15 @@ export default function ChecklistLibrary() {
               <div style={{ display: 'flex', gap: 12 }}>
                 <Tag color={TYPE_COLOR[selectedTemplate.target_type]}>{TYPE_LABEL[selectedTemplate.target_type]}</Tag>
                 {selectedTemplate.is_builtin && <Tag>内置系统级模板</Tag>}
+              </div>
+              <div style={{ marginTop: 16, padding: 16, background: 'var(--bg-card)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 10 }}>
+                <Text style={{ color: 'var(--text-secondary)', fontSize: 12, display: 'block', marginBottom: 6 }}>推荐报告模板</Text>
+                <Text style={{ color: 'var(--text-primary)', fontWeight: 700 }}>
+                  {getRecommendedReportTemplate(selectedTemplate.target_type).name}
+                </Text>
+                <Text style={{ color: 'var(--text-secondary)', display: 'block', marginTop: 6, fontSize: 13 }}>
+                  {getRecommendedReportTemplate(selectedTemplate.target_type).description}
+                </Text>
               </div>
             </div>
 

@@ -16,6 +16,12 @@ import { useQuery, useMutation } from '@tanstack/react-query'
 import type { TargetType } from '@/types'
 import { checklistApi } from '@/api/checklist'
 import { evaluationApi } from '@/api/evaluation'
+import {
+  getRecommendedReportTemplate,
+  getReportTemplatesForTarget,
+  type ReportTemplateId,
+  type ReportTemplateMode,
+} from '@/utils/reportTemplates'
 import styles from './NewEvaluationModal.module.css'
 
 const { Title, Text } = Typography
@@ -35,6 +41,12 @@ interface OllamaModel {
     parameter_size: string
     quantization_level: string
   }
+}
+
+type ApiErrorDetail = string | Array<{ msg?: string }>
+
+type ApiError = {
+  detail?: ApiErrorDetail
 }
 
 const TARGET_TYPES_CONFIG: Record<string, { icon: React.ReactNode; label: string; desc: string; color: string }> = {
@@ -82,6 +94,8 @@ export default function NewEvaluationModal({ open, onClose, onCreated }: Props) 
   const [step, setStep] = useState(0)
   const [selectedType, setSelectedType] = useState<TargetType | null>(null)
   const [selectedTemplate, setSelectedTemplate] = useState<string | null>(null)
+  const [reportTemplateMode, setReportTemplateMode] = useState<ReportTemplateMode>('auto')
+  const [selectedReportTemplate, setSelectedReportTemplate] = useState<ReportTemplateId | null>(null)
   const [form] = Form.useForm()
 
   // Ollama 本地模型发现
@@ -112,10 +126,14 @@ export default function NewEvaluationModal({ open, onClose, onCreated }: Props) 
     if (currentProvider === 'ollama') {
       // 自动填充 Ollama 默认 API Endpoint
       form.setFieldsValue({ endpoint: 'http://localhost:11434' })
-      fetchOllamaModels()
+      const timer = window.setTimeout(() => {
+        fetchOllamaModels()
+      }, 0)
+      return () => window.clearTimeout(timer)
     } else if (currentProvider === 'openai') {
       form.setFieldsValue({ endpoint: 'https://api.openai.com/v1/chat/completions' })
     }
+    return undefined
   }, [currentProvider, form, fetchOllamaModels])
 
   // 1. 获取所有模板
@@ -132,18 +150,25 @@ export default function NewEvaluationModal({ open, onClose, onCreated }: Props) 
       onCreated(data.id)
       handleClose()
     },
-    onError: (err: any) => {
+    onError: (err: unknown) => {
+      const detail = (err as ApiError).detail
       let errMsg = '创建会话失败'
-      if (Array.isArray(err.detail)) {
-        errMsg = err.detail.map((e: any) => e.msg).join(', ')
-      } else if (err.detail) {
-        errMsg = err.detail
+      if (Array.isArray(detail)) {
+        errMsg = detail.map((item) => item.msg).filter(Boolean).join(', ') || errMsg
+      } else if (detail) {
+        errMsg = detail
       }
       message.error(errMsg)
     }
   })
 
   const typeConfig = selectedType ? TARGET_TYPES_CONFIG[selectedType] : null
+  const reportTemplateOptions = selectedType ? getReportTemplatesForTarget(selectedType) : []
+  const activeReportTemplate = selectedType && selectedReportTemplate
+    ? reportTemplateOptions.find((template) => template.id === selectedReportTemplate) ?? getRecommendedReportTemplate(selectedType)
+    : selectedType
+      ? getRecommendedReportTemplate(selectedType)
+      : null
 
   // 过滤出当前选择类型的模板
   const availableTemplates = useMemo(() => {
@@ -155,9 +180,19 @@ export default function NewEvaluationModal({ open, onClose, onCreated }: Props) 
     setStep(0)
     setSelectedType(null)
     setSelectedTemplate(null)
+    setReportTemplateMode('auto')
+    setSelectedReportTemplate(null)
     setOllamaModels([])
     setOllamaError(null)
     form.resetFields()
+  }
+
+  const handleSelectType = (type: TargetType) => {
+    const recommendedTemplate = getRecommendedReportTemplate(type)
+    setSelectedType(type)
+    setSelectedTemplate(null)
+    setReportTemplateMode('auto')
+    setSelectedReportTemplate(recommendedTemplate.id)
   }
 
   const handleClose = () => {
@@ -184,6 +219,8 @@ export default function NewEvaluationModal({ open, onClose, onCreated }: Props) 
     if (values.notes) descParts.push(values.notes)
     if (values.provider) descParts.push(`[provider:${values.provider}]`)
     if (values.modelName) descParts.push(`[model:${values.modelName}]`)
+    if (selectedReportTemplate) descParts.push(`[report_template:${selectedReportTemplate}]`)
+    descParts.push(`[report_template_mode:${reportTemplateMode}]`)
 
     createMutation.mutate({
       name: values.name,
@@ -263,7 +300,7 @@ export default function NewEvaluationModal({ open, onClose, onCreated }: Props) 
                   <div
                     key={type}
                     className={`${styles.typeCard} ${selectedType === type ? styles.typeCardActive : ''}`}
-                    onClick={() => setSelectedType(type)}
+                    onClick={() => handleSelectType(type)}
                   >
                     <div className={styles.typeIcon} style={selectedType === type ? {} : { color: t.color, background: `${t.color}15` }}>
                       {t.icon}
@@ -526,7 +563,7 @@ export default function NewEvaluationModal({ open, onClose, onCreated }: Props) 
           {step === 2 && typeConfig && (
             <div>
               <Text style={{ color: '#6b7280', fontSize: 13, display: 'block', marginBottom: 16 }}>
-                选择适合本次评估的检查模板，模板决定了具体的检查项和测试范围
+                选择检查模板和报告模板。系统会根据评估对象自动推荐报告版式，也允许你手动覆盖。
               </Text>
               
               {loadingTemplates ? (
@@ -565,11 +602,64 @@ export default function NewEvaluationModal({ open, onClose, onCreated }: Props) 
               {selectedTemplate && (
                 <Alert
                   message="准备就绪"
-                  description={`选择模板后点击「开始评估」，系统将创建评估会话并加载所有检查项，你可以立即开始逐项测试。`}
+                  description={`将使用「${activeReportTemplate?.name}」生成报告。点击「开始评估」后，系统会创建评估会话并加载检查项。`}
                   type="success"
                   showIcon
                   style={{ marginTop: 16, background: '#f0fdf4', border: '1px solid #dcfce7' }}
                 />
+              )}
+
+              {activeReportTemplate && (
+                <div className={styles.reportTemplatePanel}>
+                  <div className={styles.reportTemplateHeader}>
+                    <div>
+                      <Text style={{ color: '#111827', fontWeight: 700 }}>报告模板</Text>
+                      <Text style={{ color: '#6b7280', fontSize: 12, display: 'block', marginTop: 2 }}>
+                        自动推荐适合当前检测对象的报告结构
+                      </Text>
+                    </div>
+                    <Radio.Group
+                      size="small"
+                      value={reportTemplateMode}
+                      onChange={(event) => {
+                        const mode = event.target.value as ReportTemplateMode
+                        setReportTemplateMode(mode)
+                        if (mode === 'auto' && selectedType) {
+                          setSelectedReportTemplate(getRecommendedReportTemplate(selectedType).id)
+                        }
+                      }}
+                    >
+                      <Radio.Button value="auto">自动</Radio.Button>
+                      <Radio.Button value="manual">手动</Radio.Button>
+                    </Radio.Group>
+                  </div>
+
+                  {reportTemplateMode === 'manual' ? (
+                    <div className={styles.reportTemplateChoices}>
+                      {reportTemplateOptions.map((template) => (
+                        <button
+                          type="button"
+                          key={template.id}
+                          className={`${styles.reportTemplateChoice} ${selectedReportTemplate === template.id ? styles.reportTemplateChoiceActive : ''}`}
+                          onClick={() => setSelectedReportTemplate(template.id)}
+                        >
+                          <span>{template.name}</span>
+                          <small>{template.description}</small>
+                        </button>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className={styles.reportTemplateRecommended}>
+                      <Tag color="blue" style={{ borderRadius: 100 }}>系统推荐</Tag>
+                      <strong>{activeReportTemplate.name}</strong>
+                      <p>{activeReportTemplate.description}</p>
+                    </div>
+                  )}
+
+                  <div className={styles.reportTemplateFocus}>
+                    {activeReportTemplate.focus.map((item) => <Tag key={item}>{item}</Tag>)}
+                  </div>
+                </div>
               )}
             </div>
           )}

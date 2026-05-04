@@ -2,7 +2,6 @@
  * 报告详情页
  * 展示完整评估报告：执行摘要、风险统计、发现详情、通过项清单
  */
-import { useState } from 'react'
 import {
   Button, Tag, Typography, Progress, Divider, Collapse,
   Space, Table, Row, Col, Statistic, Alert,
@@ -12,12 +11,13 @@ import {
   BugOutlined, CheckCircleOutlined, CloseCircleOutlined,
   SafetyCertificateOutlined, FileTextOutlined, WarningOutlined,
 } from '@ant-design/icons'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useParams } from 'react-router-dom'
 import type { RiskLevel, CheckResultStatus } from '@/types'
+import { getPentestReport, type PentestReportFinding } from '@/utils/pentestReports'
+import { resolveReportTemplate, type ReportTemplateId } from '@/utils/reportTemplates'
 import styles from './ReportDetail.module.css'
 
 const { Title, Text, Paragraph } = Typography
-const { Panel } = Collapse
 
 // ===== Mock 报告数据 =====
 const MOCK_REPORT = {
@@ -92,6 +92,45 @@ const SEVERITY_LABEL: Record<RiskLevel, string> = {
   critical: '严重', high: '高危', medium: '中危', low: '低危', info: '信息',
 }
 
+function getMockReportPresentation(reportId?: string) {
+  if (reportId === '2') {
+    return {
+      sessionName: 'Code Agent 工具安全测试报告',
+      targetType: 'agent' as const,
+      reportTemplate: 'agent-security' as ReportTemplateId,
+      targetDesc: '具备代码执行、文件读写和外部 API 调用能力的 Code Agent',
+      template: 'AI Agent 工具权限与行为审计模板',
+      riskTitle: 'Agent 风险发现详情',
+      passTitle: '权限控制通过项',
+      summary: '本报告聚焦 Agent 的工具权限边界、危险动作拦截、任务链路和操作审计。',
+    }
+  }
+
+  if (reportId === '3') {
+    return {
+      sessionName: 'AI 平台渗透测试报告',
+      targetType: 'webapp' as const,
+      reportTemplate: 'web-pentest' as ReportTemplateId,
+      targetDesc: '内部 AI 平台 Web 控制台、API 服务和登录入口',
+      template: 'Web 渗透测试报告模板',
+      riskTitle: 'Web 风险发现详情',
+      passTitle: '已验证安全控制',
+      summary: '本报告聚焦 Web 资产、漏洞等级、复核结论、影响范围和整改优先级。',
+    }
+  }
+
+  return {
+    sessionName: MOCK_REPORT.sessionName,
+    targetType: 'llm' as const,
+    reportTemplate: 'llm-security' as ReportTemplateId,
+    targetDesc: MOCK_REPORT.targetDesc,
+    template: MOCK_REPORT.template,
+    riskTitle: '大模型风险发现详情',
+    passTitle: '通过项清单',
+    summary: '本报告聚焦大模型安全边界、攻击样例、模型响应、失败项和修复建议。',
+  }
+}
+
 /** 总体风险评分的颜色 */
 function scoreColor(score: number) {
   if (score >= 70) return '#ff3b5c'
@@ -99,12 +138,387 @@ function scoreColor(score: number) {
   return '#22c55e'
 }
 
+type ParsedReportBlock =
+  | { type: 'paragraph'; text: string }
+  | { type: 'list'; items: string[] }
+  | { type: 'code'; text: string }
+
+type ParsedReportSection = {
+  title: string
+  blocks: ParsedReportBlock[]
+}
+
+function cleanMarkdownText(text: string) {
+  return text
+    .replace(/\*\*/g, '')
+    .replace(/^[-*]\s+/, '')
+    .replace(/^>\s?/, '')
+    .trim()
+}
+
+function parseReportContent(content: string): ParsedReportSection[] {
+  const lines = content.split('\n')
+  const sections: ParsedReportSection[] = []
+  let current: ParsedReportSection | null = null
+  let listBuffer: string[] = []
+  let codeBuffer: string[] = []
+  let inCode = false
+
+  const flushList = () => {
+    if (current && listBuffer.length > 0) {
+      current.blocks.push({ type: 'list', items: listBuffer })
+      listBuffer = []
+    }
+  }
+
+  const flushCode = () => {
+    if (current && codeBuffer.length > 0) {
+      current.blocks.push({ type: 'code', text: codeBuffer.join('\n').trim() })
+      codeBuffer = []
+    }
+  }
+
+  lines.forEach((rawLine) => {
+    const line = rawLine.trim()
+    if (!line || line === '---') {
+      flushList()
+      return
+    }
+
+    if (line.startsWith('```')) {
+      if (inCode) {
+        flushCode()
+        inCode = false
+      } else {
+        flushList()
+        inCode = true
+      }
+      return
+    }
+
+    if (inCode) {
+      codeBuffer.push(rawLine)
+      return
+    }
+
+    const heading = line.match(/^(#{1,4})\s+(.+)$/)
+    if (heading) {
+      flushList()
+      const title = cleanMarkdownText(heading[2])
+      if (!title.includes('AI 黑客军团协同渗透报告')) {
+        current = { title, blocks: [] }
+        sections.push(current)
+      }
+      return
+    }
+
+    if (!current) {
+      current = { title: '报告概述', blocks: [] }
+      sections.push(current)
+    }
+
+    if (/^[-*]\s+/.test(line)) {
+      listBuffer.push(cleanMarkdownText(line))
+      return
+    }
+
+    flushList()
+    current.blocks.push({ type: 'paragraph', text: cleanMarkdownText(line) })
+  })
+
+  flushList()
+  flushCode()
+  return sections.filter((section) => section.blocks.length > 0)
+}
+
+function pentestSeverityLabel(level: string) {
+  if (level === 'error') return '高危'
+  if (level === 'warning') return '中危'
+  return '信息'
+}
+
+function pentestSeverityColor(level: string) {
+  if (level === 'error') return '#ff3b5c'
+  if (level === 'warning') return '#ffa500'
+  return '#64748b'
+}
+
+function evidenceLabel(confidence?: string) {
+  const labels: Record<string, string> = {
+    TOOL_BASED: '工具验证',
+    TOOL_VERIFIABLE: '可验证',
+    AI_INFERRED: '待人工确认',
+    AI_ONLY: '仅 AI 推断',
+    MEDIUM: '分析报告',
+  }
+  return confidence ? labels[confidence] || confidence : '未标注'
+}
+
+function compactWhitespace(text: string) {
+  return text.replace(/\s+/g, ' ').trim()
+}
+
+function sanitizeReportSnippet(text?: string) {
+  if (!text) return ''
+  return compactWhitespace(
+    text
+      .replace(/```[\s\S]*?```/g, ' ')
+      .replace(/`{1,3}/g, ' ')
+      .replace(/^#{1,6}\s*/gm, ' ')
+      .replace(/#+/g, ' ')
+      .replace(/\*\*|__|~~|\|/g, ' ')
+      .replace(/[\u{1F300}-\u{1FAFF}]/gu, ' ')
+      .replace(/\uFE0F/g, ' ')
+      .replace(/-{3,}/g, ' ')
+      .replace(/\[[^\]]+\]\([^)]+\)/g, ' ')
+  )
+}
+
+function truncateText(text: string, maxLength: number) {
+  const cleaned = compactWhitespace(text)
+  if (cleaned.length <= maxLength) return cleaned
+  return `${cleaned.slice(0, maxLength).replace(/[，。、；：,\s]+$/, '')}...`
+}
+
+function extractFindingTitle(finding: PentestReportFinding, index: number) {
+  const source = sanitizeReportSnippet(finding.title)
+  const explicitRisk = source.match(/(?:严重|高危险|高风险|高危|中风险|中危|低风险|信息)\s*[-:：]\s*([^#。；\n|]{4,36})/)
+  if (explicitRisk?.[1]) {
+    return truncateText(explicitRisk[1].split(/【|报告|摘要|扫描/)[0].trim(), 36)
+  }
+
+  const namedRisk = source.match(/(?:SQL\s*注入|NFS\s*管理接口|SSH\s*服务|HTTP\/HTTPS\s*服务暴露|端口暴露|认证绕过|权限绕过|敏感信息泄露|TLS\/SSL\s*配置|管理接口未配置)/i)
+  if (namedRisk?.[0]) return truncateText(namedRisk[0], 36)
+
+  const firstChunk = source.split(/[#。；|]/).find((item) => item.trim().length >= 4) || source
+  const withoutReportNoise = firstChunk
+    .replace(/^\d+[.、]\s*/, '')
+    .replace(/安全分析报告|实战侦察分析报告|扫描摘要|漏洞检测|立即执行/g, '')
+    .trim()
+
+  return truncateText(withoutReportNoise || `风险发现 ${index + 1}`, 36)
+}
+
+function isNoisyReportBlob(text: string) {
+  return text.length > 220 || /实战侦察分析报告|扫描摘要|目标IP|总端口|Nmap|bash|curl|nslookup|nmap\s/i.test(text)
+}
+
+function fallbackFindingSummary(title: string) {
+  if (/NFS|管理接口/i.test(title)) return '发现疑似管理接口或内部服务暴露，需先确认是否公网可达，并限制访问来源。'
+  if (/HTTP|HTTPS|未加密/i.test(title)) return '发现 Web 服务传输或暴露面配置风险，需补充访问控制、加密传输和端口收敛验证。'
+  if (/SSH/i.test(title)) return '发现远程登录服务暴露风险，需确认访问范围、认证策略和登录审计是否满足基线。'
+  if (/SQL/i.test(title)) return '发现疑似注入风险，需要使用可复现请求和数据库侧证据进行人工复核。'
+  if (/认证|权限|越权/i.test(title)) return '发现身份认证或权限控制风险，需复测关键接口的授权边界。'
+  return `发现 ${title}，建议补齐可复验证据后纳入正式整改流程。`
+}
+
+function extractFindingSummary(finding: PentestReportFinding) {
+  const title = extractFindingTitle(finding, 0)
+  const candidates = [
+    finding.description,
+    finding.evidence?.note,
+    finding.evidence?.supporting_data,
+    finding.title,
+  ]
+
+  const summary = candidates
+    .map(sanitizeReportSnippet)
+    .map((text) => text.replace(/^目标\s*[:：].*?(?=(风险|发现|端口|服务|管理|认证|权限|HTTP|NFS|SSH))/i, ''))
+    .find((text) => text.length >= 12 && !isNoisyReportBlob(text))
+
+  return truncateText(summary || fallbackFindingSummary(title), 128)
+}
+
+function findingPriorityLabel(level: string, index: number) {
+  if (level === 'error' || index < 3) return '立即处理'
+  if (level === 'warning') return '本周排期'
+  return '持续观察'
+}
+
+function findingActionText(finding: PentestReportFinding, index: number) {
+  if (finding.level === 'error' || index < 3) return '先限制暴露面，再复测确认'
+  if (finding.level === 'warning') return '补齐证据并纳入修复计划'
+  return '记录基线，随下次扫描复核'
+}
+
 export default function ReportDetail() {
   const navigate = useNavigate()
+  const { id } = useParams()
+  const pentestReport = id ? getPentestReport(id) : undefined
+  const mockPresentation = getMockReportPresentation(id)
+  const mockReportTemplate = resolveReportTemplate(mockPresentation.targetType, mockPresentation.reportTemplate)
   const { stats, findings, passList } = MOCK_REPORT
   const passRate = Math.round((stats.pass / stats.total) * 100)
   const criticalCount = findings.filter((f) => f.severity === 'critical').length
   const highCount = findings.filter((f) => f.severity === 'high').length
+
+  if (pentestReport) {
+    const riskScore = Math.min(100, pentestReport.critical * 30 + pentestReport.high * 15 + pentestReport.medium * 6)
+    const sortedFindings = [...pentestReport.findings].sort((a, b) => {
+      const weight: Record<string, number> = { error: 3, warning: 2 }
+      return (weight[b.level] || 1) - (weight[a.level] || 1)
+    })
+    const highPriorityFindings = sortedFindings.slice(0, 8)
+    const presentableFindings = highPriorityFindings.map((finding, index) => ({
+      finding,
+      title: extractFindingTitle(finding, index),
+      summary: extractFindingSummary(finding),
+      priority: findingPriorityLabel(finding.level, index),
+      action: findingActionText(finding, index),
+    }))
+
+    return (
+      <div className={styles.container}>
+        <div className={styles.toolbar}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <Button icon={<ArrowLeftOutlined />} type="text" style={{ color: 'var(--text-secondary)' }} onClick={() => navigate('/reports')} />
+            <div>
+              <Title level={5} style={{ margin: 0, color: 'var(--text-primary)' }}>{pentestReport.name}</Title>
+              <Text style={{ color: 'var(--text-secondary)', fontSize: 12 }}>渗透测试报告 · {pentestReport.generatedAt}</Text>
+            </div>
+          </div>
+          <Space>
+            <Button icon={<PrinterOutlined />} style={{ color: 'var(--text-secondary)' }}>打印</Button>
+            <Button icon={<DownloadOutlined />} type="primary" style={{ background: 'var(--color-primary)' }}>
+              导出 PDF
+            </Button>
+          </Space>
+        </div>
+
+        <article className={styles.standardReport}>
+          <header className={styles.standardReportHeader}>
+            <div>
+              <div className={styles.reportEyebrow}>PENTEST SUMMARY</div>
+              <h1>{pentestReport.name}</h1>
+              <p>面向管理者和安全工程师的渗透测试摘要报告。正文仅保留结论、关键风险、复核意见和整改动作，原始 AI 输出收纳在附录。</p>
+            </div>
+            <div className={styles.standardMeta}>
+              <div><span>目标</span><strong>{pentestReport.target}</strong></div>
+              <div><span>生成时间</span><strong>{pentestReport.generatedAt}</strong></div>
+              <div><span>模型</span><strong>{pentestReport.model}</strong></div>
+              <div><span>参与 Agent</span><strong>{pentestReport.agents.join('、')}</strong></div>
+            </div>
+          </header>
+
+          <section className={styles.executiveGrid}>
+            <div className={styles.executiveConclusion}>
+              <h2>总体结论</h2>
+              <p>
+                本次扫描共发现 {pentestReport.findings.length} 项风险，其中高优先级风险 {pentestReport.critical + pentestReport.high} 项。
+                {pentestReport.review ? ` ${pentestReport.review.conclusion}` : ' 建议优先复核高危发现并补充原始证据。'}
+              </p>
+              <div className={styles.priorityStrip}>
+                <span>优先处理：开放管理面、未加密服务、可验证高危项</span>
+              </div>
+            </div>
+            <div className={styles.scorePanel}>
+              <Progress
+                type="circle"
+                percent={riskScore}
+                size={118}
+                strokeColor={scoreColor(riskScore)}
+                format={(p) => <span style={{ color: scoreColor(riskScore), fontWeight: 750 }}>{p}</span>}
+              />
+              <Text type="secondary">风险评分，数值越高风险越大</Text>
+            </div>
+          </section>
+
+          <section className={styles.kpiRow}>
+            <div><span>严重</span><strong>{pentestReport.critical}</strong></div>
+            <div><span>高危</span><strong>{pentestReport.high}</strong></div>
+            <div><span>中低风险</span><strong>{pentestReport.medium}</strong></div>
+            <div><span>安全评分</span><strong>{pentestReport.passRate}%</strong></div>
+          </section>
+
+          {pentestReport.review && (
+            <section className={styles.reviewBlock}>
+              <div className={styles.blockTitle}>审核官复核</div>
+              <div className={styles.reviewStats}>
+                <Tag color={pentestReport.review.overallConfidence === 'high' ? 'green' : pentestReport.review.overallConfidence === 'medium' ? 'orange' : 'red'}>
+                  {pentestReport.review.overallConfidence === 'high' ? '高可信' : pentestReport.review.overallConfidence === 'medium' ? '中可信' : '低可信'}
+                </Tag>
+                <Tag color="green">通过 {pentestReport.review.verified}</Tag>
+                <Tag color="orange">待确认 {pentestReport.review.needsReview}</Tag>
+                <Tag color="red">驳回 {pentestReport.review.rejected}</Tag>
+              </div>
+              <p>{pentestReport.review.conclusion}</p>
+            </section>
+          )}
+
+          <section className={styles.reportBlock}>
+            <div className={styles.blockTitle}>核心发现</div>
+            <div className={styles.findingCards}>
+              {presentableFindings.map(({ finding, title, summary, priority, action }, index) => (
+                <div className={styles.findingCard} key={finding.id}>
+                  <div className={styles.findingIndex}>{String(index + 1).padStart(2, '0')}</div>
+                  <div className={styles.findingMain}>
+                    <div className={styles.findingCardHeader}>
+                      <strong>{title}</strong>
+                      <Tag color={pentestSeverityColor(finding.level)}>{pentestSeverityLabel(finding.level)}</Tag>
+                    </div>
+                    <p>{summary}</p>
+                    <div className={styles.findingMeta}>
+                      <span>证据：{evidenceLabel(finding.evidence?.confidence)}</span>
+                      <span>建议：{action}</span>
+                    </div>
+                  </div>
+                  <div className={styles.findingPriority}>{priority}</div>
+                </div>
+              ))}
+            </div>
+          </section>
+
+          <section className={styles.reportBlock}>
+            <div className={styles.blockTitle}>整改计划</div>
+            <div className={styles.actionPlan}>
+              <div>
+                <strong>1. 立即隔离高危暴露面</strong>
+                <p>关闭不必要端口、限制管理入口访问来源、对公网服务启用 HTTPS 与访问控制。</p>
+              </div>
+              <div>
+                <strong>2. 补充人工验证证据</strong>
+                <p>对标记为“待人工确认”的发现执行复测，保留命令输出、请求响应和截图证据。</p>
+              </div>
+              <div>
+                <strong>3. 纳入持续审计</strong>
+                <p>将确认后的风险项同步到修复跟踪流程，并在报告中心保留复核版本。</p>
+              </div>
+            </div>
+          </section>
+
+          <section className={styles.reportBlock}>
+            <Collapse
+              ghost
+              items={[
+                {
+                  key: 'raw',
+                  label: '附录：原始 AI 输出与详细段落',
+                  children: (
+                    <div className={styles.appendixBody}>
+                      {parseReportContent(pentestReport.content).map((section, index) => (
+                        <section key={`${section.title}-${index}`} className={styles.appendixSection}>
+                          <h3>{section.title}</h3>
+                          {section.blocks.map((block, blockIndex) => {
+                            if (block.type === 'list') {
+                              return <ul key={blockIndex}>{block.items.map((item) => <li key={item}>{item}</li>)}</ul>
+                            }
+                            if (block.type === 'code') {
+                              return <pre key={blockIndex} className={styles.reportEvidenceCode}>{block.text}</pre>
+                            }
+                            return <p key={blockIndex}>{block.text}</p>
+                          })}
+                        </section>
+                      ))}
+                    </div>
+                  ),
+                },
+              ]}
+            />
+          </section>
+        </article>
+      </div>
+    )
+  }
 
   const findingColumns = [
     {
@@ -142,9 +556,9 @@ export default function ReportDetail() {
       {/* 顶部操作栏 */}
       <div className={styles.toolbar}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <Button icon={<ArrowLeftOutlined />} type="text" style={{ color: 'var(--text-secondary)' }} onClick={() => navigate('/reports')} />
-          <div>
-            <Title level={5} style={{ margin: 0, color: 'var(--text-primary)' }}>{MOCK_REPORT.sessionName}</Title>
+            <Button icon={<ArrowLeftOutlined />} type="text" style={{ color: 'var(--text-secondary)' }} onClick={() => navigate('/reports')} />
+            <div>
+            <Title level={5} style={{ margin: 0, color: 'var(--text-primary)' }}>{mockPresentation.sessionName}</Title>
             <Text style={{ color: 'var(--text-secondary)', fontSize: 12 }}>评估报告 · {MOCK_REPORT.completedAt}</Text>
           </div>
         </div>
@@ -168,8 +582,9 @@ export default function ReportDetail() {
               <table className={styles.infoTable}>
                 <tbody>
                   {[
-                    ['评估对象', MOCK_REPORT.targetDesc],
-                    ['检查模板', MOCK_REPORT.template],
+                    ['评估对象', mockPresentation.targetDesc],
+                    ['检查模板', mockPresentation.template],
+                    ['报告模板', mockReportTemplate.name],
                     ['评估人员', MOCK_REPORT.assessor],
                     ['完成时间', MOCK_REPORT.completedAt],
                     ['检查项总数', `${stats.total} 项`],
@@ -192,6 +607,13 @@ export default function ReportDetail() {
                   style={{ marginTop: 16, background: 'rgba(255,59,92,0.08)', border: '1px solid rgba(255,59,92,0.25)' }}
                 />
               )}
+              <Alert
+                message={mockReportTemplate.name}
+                description={mockPresentation.summary}
+                type="info"
+                showIcon
+                style={{ marginTop: 16, background: '#f8fafc', border: '1px solid #e5e7eb' }}
+              />
             </div>
           </Col>
 
@@ -264,7 +686,7 @@ export default function ReportDetail() {
       {/* ===== 3. 风险发现详情 ===== */}
       <div className={styles.section}>
         <div className={styles.sectionTitle}>
-          <BugOutlined style={{ color: '#ff3b5c' }} /> 风险发现详情
+          <BugOutlined style={{ color: '#ff3b5c' }} /> {mockPresentation.riskTitle}
           <Text style={{ color: 'var(--text-secondary)', fontSize: 12, fontWeight: 400, marginLeft: 8 }}>
             按严重度排序
           </Text>
@@ -278,7 +700,7 @@ export default function ReportDetail() {
             rowKey="id"
             pagination={false}
             size="small"
-            onRow={(record) => ({
+            onRow={() => ({
               style: { cursor: 'pointer' },
             })}
           />
@@ -323,7 +745,7 @@ export default function ReportDetail() {
       {/* ===== 4. 通过项清单 ===== */}
       <div className={styles.section}>
         <div className={styles.sectionTitle}>
-          <CheckCircleOutlined style={{ color: '#22c55e' }} /> 通过项清单
+          <CheckCircleOutlined style={{ color: '#22c55e' }} /> {mockPresentation.passTitle}
         </div>
         <div className={styles.card}>
           <div className={styles.passGrid}>

@@ -1,0 +1,273 @@
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 320px;
+  gap: 24px;
+  padding: 28px;
+  background: #0f172a;
+  border-radius: 14px;
+  color: #ffffff;
+}
+
+.eyebrow {
+  color: #93c5fd;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.hero h2 {
+  margin: 8px 0 10px !important;
+  color: #ffffff !important;
+}
+
+.hero p {
+  max-width: 780px;
+  margin: 0;
+  color: #cbd5e1;
+  line-height: 1.9;
+}
+
+.heroPanel {
+  display: grid;
+  gap: 10px;
+}
+
+.heroPanel div {
+  padding: 14px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 10px;
+}
+
+.heroPanel span {
+  display: block;
+  color: #94a3b8;
+  font-size: 12px;
+}
+
+.heroPanel strong {
+  display: block;
+  margin-top: 4px;
+  color: #ffffff;
+  font-size: 18px;
+}
+
+.priorityCard {
+  height: 100%;
+  border: 1px solid #e2e8f0;
+}
+
+.priorityCard h5 {
+  margin: 12px 0 8px !important;
+}
+
+.priorityCard span {
+  color: #64748b;
+  line-height: 1.7;
+}
+
+.section {
+  padding: 22px;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+}
+
+.sectionHeader {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: flex-start;
+  margin-bottom: 18px;
+}
+
+.sectionHeader h4 {
+  margin: 0 !important;
+}
+
+.sectionHeader > span {
+  max-width: 520px;
+  color: #64748b;
+}
+
+.objectGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+  gap: 12px;
+}
+
+.objectCard {
+  position: relative;
+  min-height: 144px;
+  padding: 16px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+}
+
+.objectCard > span {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+}
+
+.objectCard strong {
+  display: block;
+  color: #0f172a;
+  font-size: 15px;
+}
+
+.objectCard code {
+  display: inline-block;
+  margin-top: 6px;
+  padding: 3px 6px;
+  color: #2563eb;
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  border-radius: 6px;
+  font-size: 12px;
+}
+
+.objectCard p {
+  margin: 10px 0 0;
+  color: #64748b;
+  font-size: 13px;
+  line-height: 1.7;
+}
+
+.workflow {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 10px;
+}
+
+.workflowStep {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  padding: 12px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+}
+
+.workflowStep span {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  color: #2563eb;
+  background: #eff6ff;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.workflowStep strong {
+  color: #0f172a;
+  font-size: 13px;
+}
+
+.phaseItem {
+  padding-bottom: 12px;
+}
+
+.phaseTitle {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.phaseTitle strong {
+  color: #0f172a;
+}
+
+.phaseTags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.templateList {
+  display: grid;
+  gap: 10px;
+}
+
+.templateItem {
+  padding: 14px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+}
+
+.templateItem strong {
+  display: block;
+  color: #0f172a;
+}
+
+.templateItem span {
+  display: block;
+  margin-top: 4px;
+  color: #2563eb;
+  font-size: 12px;
+}
+
+.templateItem p {
+  margin: 8px 0 0;
+  color: #64748b;
+  font-size: 13px;
+  line-height: 1.7;
+}
+
+.nextGrid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+}
+
+.nextGrid div {
+  padding: 18px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+}
+
+.nextGrid svg {
+  color: #2563eb;
+  font-size: 22px;
+}
+
+.nextGrid strong {
+  display: block;
+  margin-top: 10px;
+  color: #0f172a;
+}
+
+.nextGrid p {
+  margin: 8px 0 0;
+  color: #64748b;
+  font-size: 13px;
+  line-height: 1.7;
+}
+
+@media (max-width: 900px) {
+  .hero,
+  .nextGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .sectionHeader {
+    flex-direction: column;
+  }
+}

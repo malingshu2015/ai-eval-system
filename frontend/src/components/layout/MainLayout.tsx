@@ -14,6 +14,7 @@ import {
   UserOutlined,
   BellOutlined,
   SafetyOutlined,
+  PartitionOutlined,
 } from '@ant-design/icons'
 import { useAuthStore } from '@/stores/authStore'
 import styles from './MainLayout.module.css'
@@ -36,6 +37,11 @@ const menuItems = [
     key: '/pentest-hub',
     icon: <SafetyOutlined />,
     label: 'AI 渗透中心',
+  },
+  {
+    key: '/blueprint',
+    icon: <PartitionOutlined />,
+    label: '产品整改蓝图',
   },
   {
     key: '/checklists',
@@ -67,7 +73,12 @@ export default function MainLayout() {
     {
       key: 'profile',
       icon: <UserOutlined />,
-      label: '个人设置',
+      label: '账号设置',
+    },
+    {
+      key: 'switch-account',
+      icon: <UserOutlined />,
+      label: '切换账号',
     },
     { type: 'divider' as const },
     {
@@ -79,6 +90,13 @@ export default function MainLayout() {
   ]
 
   const handleUserMenuClick = ({ key }: { key: string }) => {
+    if (key === 'profile') {
+      navigate('/settings')
+    }
+    if (key === 'switch-account') {
+      logout()
+      navigate('/login')
+    }
     if (key === 'logout') {
       logout()
       navigate('/login')

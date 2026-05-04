@@ -4,20 +4,32 @@
 import { Button, Table, Tag, Typography, Space } from 'antd'
 import { DownloadOutlined, EyeOutlined, FileTextOutlined } from '@ant-design/icons'
 import { useNavigate } from 'react-router-dom'
+import { getPentestReports } from '@/utils/pentestReports'
+import { resolveReportTemplate, type ReportTemplateId } from '@/utils/reportTemplates'
+import type { TargetType } from '@/types'
 
 const { Title, Text } = Typography
 
 const MOCK_REPORTS = [
-  { id: '1', name: 'GPT-4o 安全评估报告', session: 'GPT-4o 安全评估 #001', type: 'llm', date: '2026-04-21', critical: 2, high: 1, medium: 3, passRate: 61 },
-  { id: '2', name: 'Code Agent 工具安全测试报告', session: 'Code Agent 工具安全测试', type: 'agent', date: '2026-04-20', critical: 0, high: 1, medium: 2, passRate: 83 },
-  { id: '3', name: 'AI 平台渗透测试报告', session: '内部 AI 平台渗透测试', type: 'webapp', date: '2026-04-18', critical: 1, high: 2, medium: 1, passRate: 72 },
+  { id: '1', name: 'GPT-4o 安全评估报告', session: 'GPT-4o 安全评估 #001', type: 'llm', reportTemplate: 'llm-security', date: '2026-04-21', critical: 2, high: 1, medium: 3, passRate: 61 },
+  { id: '2', name: 'Code Agent 工具安全测试报告', session: 'Code Agent 工具安全测试', type: 'agent', reportTemplate: 'agent-security', date: '2026-04-20', critical: 0, high: 1, medium: 2, passRate: 83 },
+  { id: '3', name: 'AI 平台渗透测试报告', session: '内部 AI 平台渗透测试', type: 'webapp', reportTemplate: 'web-pentest', date: '2026-04-18', critical: 1, high: 2, medium: 1, passRate: 72 },
 ]
 
-const TYPE_COLOR: Record<string, string> = { llm: 'var(--color-primary)', agent: '#8b5cf6', webapp: '#06b6d4' }
-const TYPE_LABEL: Record<string, string> = { llm: 'AI 大模型', agent: 'AI Agent', webapp: 'Web 应用' }
+const TYPE_COLOR: Record<string, string> = { llm: 'var(--color-primary)', agent: '#8b5cf6', webapp: '#06b6d4', pentest: '#08979c' }
+const TYPE_LABEL: Record<string, string> = { llm: 'AI 大模型', agent: 'AI Agent', webapp: 'Web 应用', pentest: '渗透测试' }
+
+type ReportRow = typeof MOCK_REPORTS[0] | ReturnType<typeof getPentestReports>[0]
+
+function getReportTemplateName(row: ReportRow) {
+  const targetType = row.type === 'pentest' ? 'webapp' : row.type as TargetType
+  const templateId = 'reportTemplate' in row ? row.reportTemplate as ReportTemplateId | undefined : 'web-pentest'
+  return resolveReportTemplate(targetType, templateId).shortName
+}
 
 export default function Reports() {
   const navigate = useNavigate()
+  const reports: ReportRow[] = [...getPentestReports(), ...MOCK_REPORTS]
 
   const columns = [
     {
@@ -36,10 +48,18 @@ export default function Reports() {
       render: (v: string) => <Tag color={TYPE_COLOR[v]} style={{ borderRadius: 100 }}>{TYPE_LABEL[v]}</Tag>,
     },
     { title: '关联评估', dataIndex: 'session', render: (v: string) => <Text style={{ color: 'var(--text-secondary)' }}>{v}</Text> },
+    {
+      title: '报告模板',
+      render: (_: unknown, record: ReportRow) => (
+        <Tag style={{ borderRadius: 100, background: '#f8fafc', borderColor: '#e5e7eb', color: '#475569' }}>
+          {getReportTemplateName(record)}
+        </Tag>
+      ),
+    },
     { title: '生成日期', dataIndex: 'date', render: (v: string) => <Text style={{ color: 'var(--text-muted)' }}>{v}</Text> },
     {
       title: '风险摘要',
-      render: (_: unknown, r: typeof MOCK_REPORTS[0]) => (
+      render: (_: unknown, r: ReportRow) => (
         <Space size={4}>
           {r.critical > 0 && <Tag color="#ff3b5c" style={{ borderRadius: 100 }}>严重 {r.critical}</Tag>}
           {r.high > 0 && <Tag color="#ff6b35" style={{ borderRadius: 100 }}>高危 {r.high}</Tag>}
@@ -58,7 +78,7 @@ export default function Reports() {
     },
     {
       title: '操作',
-      render: (_: unknown, record: typeof MOCK_REPORTS[0]) => (
+      render: (_: unknown, record: ReportRow) => (
         <Space>
           <Button
             type="link"
@@ -84,7 +104,7 @@ export default function Reports() {
         <Text style={{ color: 'var(--text-secondary)', fontSize: 13 }}>查看、下载所有已完成的评估报告</Text>
       </div>
       <div style={{ background: 'var(--bg-card)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 10, padding: 20 }}>
-        <Table dataSource={MOCK_REPORTS} columns={columns} rowKey="id" pagination={false} size="middle" />
+        <Table dataSource={reports} columns={columns} rowKey="id" pagination={false} size="middle" />
       </div>
     </div>
   )
