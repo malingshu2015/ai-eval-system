@@ -3,8 +3,9 @@
  */
 import { Button, Table, Tag, Typography, Space } from 'antd'
 import { DownloadOutlined, EyeOutlined, FileTextOutlined } from '@ant-design/icons'
+import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { getPentestReports } from '@/utils/pentestReports'
+import { fetchPentestReports, getPentestReports } from '@/utils/pentestReports'
 import { resolveReportTemplate, type ReportTemplateId } from '@/utils/reportTemplates'
 import type { TargetType } from '@/types'
 import type { ConfidenceLevel, DataSourceKind } from '@/types/domain'
@@ -68,7 +69,18 @@ function getReportTemplateName(row: ReportRow) {
 
 export default function Reports() {
   const navigate = useNavigate()
-  const reports: ReportRow[] = [...getPentestReports(), ...MOCK_REPORTS]
+  const [pentestReports, setPentestReports] = useState(() => getPentestReports())
+  const reports: ReportRow[] = [...pentestReports, ...MOCK_REPORTS]
+
+  useEffect(() => {
+    let mounted = true
+    fetchPentestReports().then((items) => {
+      if (mounted) setPentestReports(items)
+    })
+    return () => {
+      mounted = false
+    }
+  }, [])
 
   const columns = [
     {

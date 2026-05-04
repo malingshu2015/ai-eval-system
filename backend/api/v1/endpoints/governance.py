@@ -8,10 +8,12 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.database import get_db
-from model.governance import AuditEvent, RemediationTask
+from model.governance import AuditEvent, PentestReport, RemediationTask
 from schema.governance import (
     AuditEventCreate,
     AuditEventResponse,
+    PentestReportPayload,
+    PentestReportResponse,
     RemediationTaskCreate,
     RemediationTaskResponse,
     RemediationTaskUpdate,
@@ -72,6 +74,39 @@ async def create_remediation(task_in: RemediationTaskCreate, db: AsyncSession = 
     await db.commit()
     await db.refresh(task)
     return task
+
+
+@router.get("/pentest-reports", response_model=List[PentestReportResponse], response_model_by_alias=True)
+async def list_pentest_reports(db: AsyncSession = Depends(get_db)):
+    """查询渗透测试报告，包含结构化风险、证据和复核快照。"""
+    result = await db.execute(select(PentestReport).order_by(PentestReport.created_at.desc()).limit(100))
+    return result.scalars().all()
+
+
+@router.post("/pentest-reports", response_model=PentestReportResponse, response_model_by_alias=True)
+async def upsert_pentest_report(report_in: PentestReportPayload, db: AsyncSession = Depends(get_db)):
+    """保存渗透测试报告；相同 id 时更新快照。"""
+    report = await db.get(PentestReport, report_in.id)
+    payload = report_in.model_dump(by_alias=False)
+    if report:
+        for key, value in payload.items():
+            setattr(report, key, value)
+    else:
+        report = PentestReport(**payload)
+        db.add(report)
+
+    await db.commit()
+    await db.refresh(report)
+    return report
+
+
+@router.get("/pentest-reports/{report_id}", response_model=PentestReportResponse, response_model_by_alias=True)
+async def get_pentest_report(report_id: str, db: AsyncSession = Depends(get_db)):
+    """查询单个渗透测试报告。"""
+    report = await db.get(PentestReport, report_id)
+    if not report:
+        raise HTTPException(status_code=404, detail="报告不存在")
+    return report
 
 
 @router.get("/remediations/{task_id}", response_model=RemediationTaskResponse, response_model_by_alias=True)

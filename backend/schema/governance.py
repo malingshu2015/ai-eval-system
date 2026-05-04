@@ -6,7 +6,7 @@ from typing import Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from model.governance import AuditResult, RemediationStatus, Severity
+from model.governance import AuditResult, RemediationStatus, ReportStatus, Severity
 
 
 class CamelModel(BaseModel):
@@ -62,5 +62,36 @@ class RemediationTaskUpdate(CamelModel):
 
 
 class RemediationTaskResponse(RemediationTaskCreate):
+    created_at: datetime = Field(alias="createdAt")
+    updated_at: datetime = Field(alias="updatedAt")
+
+
+class PentestReportPayload(CamelModel):
+    id: str
+    name: str
+    session: str
+    type: str = "pentest"
+    report_template: Optional[str] = Field(default=None, alias="reportTemplate")
+    target: str
+    model: str
+    agents: list[str] = []
+    date: str
+    generated_at: str = Field(alias="generatedAt")
+    critical: int = 0
+    high: int = 0
+    medium: int = 0
+    pass_rate: int = Field(default=0, alias="passRate")
+    content: str
+    findings: list[dict] = []
+    structured_findings: list[dict] = Field(default=[], alias="structuredFindings")
+    evidence_items: list[dict] = Field(default=[], alias="evidenceItems")
+    review_result: Optional[dict] = Field(default=None, alias="reviewResult")
+    data_source: Optional[str] = Field(default=None, alias="dataSource")
+    report_version: int = Field(default=1, alias="reportVersion")
+    review: Optional[dict] = None
+    status: ReportStatus = ReportStatus.GENERATED
+
+
+class PentestReportResponse(PentestReportPayload):
     created_at: datetime = Field(alias="createdAt")
     updated_at: datetime = Field(alias="updatedAt")

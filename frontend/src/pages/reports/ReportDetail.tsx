@@ -11,9 +11,10 @@ import {
   BugOutlined, CheckCircleOutlined, CloseCircleOutlined,
   SafetyCertificateOutlined, FileTextOutlined, WarningOutlined,
 } from '@ant-design/icons'
+import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import type { RiskLevel, CheckResultStatus } from '@/types'
-import { getPentestReport, getReportEvidence, getReportFindings, getReportReview } from '@/utils/pentestReports'
+import { fetchPentestReport, getPentestReport, getReportEvidence, getReportFindings, getReportReview } from '@/utils/pentestReports'
 import { createRemediationTask, getRemediationTaskByFinding } from '@/utils/remediationTasks'
 import type { EvidenceStatus, Finding, Severity } from '@/types/domain'
 import { resolveReportTemplate, type ReportTemplateId } from '@/utils/reportTemplates'
@@ -358,13 +359,25 @@ function findingActionText(finding: Finding, index: number) {
 export default function ReportDetail() {
   const navigate = useNavigate()
   const { id } = useParams()
-  const pentestReport = id ? getPentestReport(id) : undefined
+  const [pentestReport, setPentestReport] = useState(() => id ? getPentestReport(id) : undefined)
   const mockPresentation = getMockReportPresentation(id)
   const mockReportTemplate = resolveReportTemplate(mockPresentation.targetType, mockPresentation.reportTemplate)
   const { stats, findings, passList } = MOCK_REPORT
   const passRate = Math.round((stats.pass / stats.total) * 100)
   const criticalCount = findings.filter((f) => f.severity === 'critical').length
   const highCount = findings.filter((f) => f.severity === 'high').length
+
+  useEffect(() => {
+    if (!id) return
+
+    let mounted = true
+    fetchPentestReport(id).then((report) => {
+      if (mounted && report) setPentestReport(report)
+    })
+    return () => {
+      mounted = false
+    }
+  }, [id])
 
   if (pentestReport) {
     const reportTemplate = resolveReportTemplate('webapp', pentestReport.reportTemplate)

@@ -20,6 +20,8 @@ from model.evaluation import (
 from model.governance import (
     AuditEvent,
     AuditResult,
+    PentestReport,
+    ReportStatus,
     RemediationStatus,
     RemediationTask,
     Severity,
@@ -40,6 +42,8 @@ __all__ = [
     "CheckResultStatus",
     "AuditEvent",
     "AuditResult",
+    "PentestReport",
+    "ReportStatus",
     "RemediationStatus",
     "RemediationTask",
     "Severity",

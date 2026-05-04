@@ -4,7 +4,7 @@
 import enum
 from typing import Optional
 
-from sqlalchemy import Enum, String, Text
+from sqlalchemy import Enum, JSON, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from model.base import Base
@@ -34,6 +34,14 @@ class Severity(str, enum.Enum):
     MEDIUM = "medium"
     LOW = "low"
     INFO = "info"
+
+
+class ReportStatus(str, enum.Enum):
+    """报告状态"""
+    DRAFT = "draft"
+    GENERATED = "generated"
+    PUBLISHED = "published"
+    ARCHIVED = "archived"
 
 
 class AuditEvent(Base):
@@ -76,3 +84,32 @@ class RemediationTask(Base):
     action_plan: Mapped[str] = mapped_column(Text, nullable=False)
     retest_result: Mapped[Optional[str]] = mapped_column(Text)
     closed_at: Mapped[Optional[str]] = mapped_column(String(64))
+
+
+class PentestReport(Base):
+    """渗透测试报告聚合：保存报告、风险、证据和复核快照"""
+    __tablename__ = "pentest_reports"
+
+    id: Mapped[str] = mapped_column(String(96), primary_key=True)
+    name: Mapped[str] = mapped_column(String(256), nullable=False)
+    session: Mapped[str] = mapped_column(String(256), nullable=False)
+    type: Mapped[str] = mapped_column(String(32), default="pentest", nullable=False, index=True)
+    report_template: Mapped[Optional[str]] = mapped_column(String(64))
+    target: Mapped[str] = mapped_column(String(512), nullable=False, index=True)
+    model: Mapped[str] = mapped_column(String(128), nullable=False)
+    agents: Mapped[list[str]] = mapped_column(JSON, default=list, nullable=False)
+    date: Mapped[str] = mapped_column(String(32), nullable=False)
+    generated_at: Mapped[str] = mapped_column(String(64), nullable=False)
+    critical: Mapped[int] = mapped_column(default=0, nullable=False)
+    high: Mapped[int] = mapped_column(default=0, nullable=False)
+    medium: Mapped[int] = mapped_column(default=0, nullable=False)
+    pass_rate: Mapped[int] = mapped_column(default=0, nullable=False)
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    findings: Mapped[list[dict]] = mapped_column(JSON, default=list, nullable=False)
+    structured_findings: Mapped[list[dict]] = mapped_column(JSON, default=list, nullable=False)
+    evidence_items: Mapped[list[dict]] = mapped_column(JSON, default=list, nullable=False)
+    review_result: Mapped[Optional[dict]] = mapped_column(JSON)
+    data_source: Mapped[Optional[str]] = mapped_column(String(32))
+    report_version: Mapped[int] = mapped_column(default=1, nullable=False)
+    review: Mapped[Optional[dict]] = mapped_column(JSON)
+    status: Mapped[ReportStatus] = mapped_column(Enum(ReportStatus), default=ReportStatus.GENERATED, nullable=False)

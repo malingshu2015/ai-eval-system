@@ -1,5 +1,6 @@
 import apiClient from './client'
 import type { AuditEvent, RemediationTask } from '@/types/domain'
+import type { PentestReportRecord } from '@/utils/pentestReports'
 
 export type CreateAuditEventDto = AuditEvent
 
@@ -33,5 +34,17 @@ export const governanceApi = {
 
   updateRemediationTask: (id: string, data: UpdateRemediationDto): Promise<RemediationTask> => {
     return apiClient.patch(`/remediations/${id}`, data)
+  },
+
+  getPentestReports: (): Promise<PentestReportRecord[]> => {
+    return apiClient.get('/pentest-reports')
+  },
+
+  getPentestReport: (id: string): Promise<PentestReportRecord> => {
+    return apiClient.get(`/pentest-reports/${id}`)
+  },
+
+  savePentestReport: (data: PentestReportRecord): Promise<PentestReportRecord> => {
+    return apiClient.post('/pentest-reports', data)
   },
 }
