@@ -2,7 +2,7 @@
  * 仪表盘页面
  * 展示评估任务统计、最新发现和风险趋势
  */
-import { Row, Col, Statistic, Progress, Table, Tag, Typography, Button, Space } from 'antd'
+import { Row, Col, Progress, Table, Tag, Typography, Button, Space } from 'antd'
 import {
   SafetyCertificateOutlined,
   BugOutlined,

@@ -395,7 +395,7 @@ export default function Settings() {
     { title: '时间', dataIndex: 'createdAt', width: 180 },
     { title: '操作人', dataIndex: 'actorName', width: 130, render: (value?: string) => value || '未知用户' },
     { title: '操作类型', dataIndex: 'action', width: 140 },
-    { title: '对象', dataIndex: 'targetName', render: (value?: string, record) => value || record.targetId || record.targetType },
+    { title: '对象', dataIndex: 'targetName', render: (value: string | undefined, record) => value || record.targetId || record.targetType },
     {
       title: '结果',
       dataIndex: 'result',
@@ -1032,11 +1032,11 @@ export default function Settings() {
       >
         {auditDetail && (
           <Descriptions column={1} size="small" bordered>
-            <Descriptions.Item label="时间">{auditDetail.time}</Descriptions.Item>
-            <Descriptions.Item label="操作人">{auditDetail.operator}</Descriptions.Item>
+            <Descriptions.Item label="时间">{auditDetail.createdAt}</Descriptions.Item>
+            <Descriptions.Item label="操作人">{auditDetail.actorName || auditDetail.actorId || '未知用户'}</Descriptions.Item>
             <Descriptions.Item label="操作类型">{auditDetail.action}</Descriptions.Item>
-            <Descriptions.Item label="操作对象">{auditDetail.target}</Descriptions.Item>
-            <Descriptions.Item label="来源 IP">{auditDetail.ip}</Descriptions.Item>
+            <Descriptions.Item label="操作对象">{auditDetail.targetName || auditDetail.targetId || auditDetail.targetType}</Descriptions.Item>
+            <Descriptions.Item label="来源 IP">{auditDetail.sourceIp || 'local-browser'}</Descriptions.Item>
             <Descriptions.Item label="结果">
               <Tag color={auditResultColor(auditDetail.result)}>{auditResultLabel(auditDetail.result)}</Tag>
             </Descriptions.Item>

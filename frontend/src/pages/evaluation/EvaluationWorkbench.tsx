@@ -5,8 +5,8 @@
 import { useState, useMemo, useEffect } from 'react'
 import {
   Button, Tag, Radio, Input, Upload, Typography,
-  Progress, Badge, Divider, Space, message, Steps,
-  Tooltip, Collapse, Empty, Spin
+  Progress, Badge, Divider, Space, message,
+  Tooltip, Empty, Spin
 } from 'antd'
 import {
   CheckCircleOutlined, CloseCircleOutlined, MinusCircleOutlined,
@@ -269,6 +269,9 @@ export default function EvaluationWorkbench() {
 
   // 真实 WebSocket 终端执行
   const handleRunTool = (toolId: string) => {
+    if (!session) return
+
+    const activeSession = session
     setActiveTab('terminal')
     setTerminalOutput(`> 准备启动工具: ${toolId} ...\n`)
     
@@ -296,7 +299,7 @@ export default function EvaluationWorkbench() {
       clearTimeout(timeout)
       setTerminalOutput(prev => prev + `> [系统] 连接成功！下发评估指令...\n`)
       // 从 target_description 中提取模型名称（格式: [model:xxx]）
-      const modelMatch = session.target_description?.match(/\[model:([^\]]+)\]/)
+      const modelMatch = activeSession.target_description?.match(/\[model:([^\]]+)\]/)
       const modelName = modelMatch ? modelMatch[1] : undefined
 
       socket.send(JSON.stringify({ 
@@ -304,7 +307,7 @@ export default function EvaluationWorkbench() {
         tool_id: toolId,
         check_item_id: activeItemId,
         item_name: activeItem?.name,
-        target: session.target_url || "localhost",
+        target: activeSession.target_url || "localhost",
         model_name: modelName,
       }))
     }
@@ -363,10 +366,6 @@ export default function EvaluationWorkbench() {
       message.error('保存失败，请重试')
     }
   })
-
-  const handleStatusChange = (e: any) => {
-    updateMutation.mutate({ status: e.target.value })
-  }
 
   // 进度统计
   const totalItems = allItems.length
