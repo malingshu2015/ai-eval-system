@@ -1,0 +1,104 @@
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.header {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: flex-start;
+}
+
+.stats {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+}
+
+.statCard {
+  padding: 18px;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+}
+
+.statCard span {
+  display: block;
+  color: #64748b;
+  font-size: 12px;
+}
+
+.statCard strong {
+  display: block;
+  margin-top: 8px;
+  color: #0f172a;
+  font-size: 26px;
+}
+
+.panel {
+  padding: 20px;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+}
+
+.detailGrid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 320px;
+  gap: 16px;
+}
+
+.section {
+  padding: 20px;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+}
+
+.section h4 {
+  margin: 0 0 12px;
+}
+
+.section p {
+  color: #64748b;
+  line-height: 1.8;
+}
+
+.metaList {
+  display: grid;
+  gap: 10px;
+}
+
+.metaList div {
+  padding-bottom: 10px;
+  border-bottom: 1px solid #edf2f7;
+}
+
+.metaList div:last-child {
+  border-bottom: none;
+}
+
+.metaList span {
+  display: block;
+  color: #64748b;
+  font-size: 12px;
+}
+
+.metaList strong {
+  display: block;
+  margin-top: 4px;
+  color: #0f172a;
+}
+
+.timelineItem {
+  color: #475569;
+}
+
+@media (max-width: 900px) {
+  .stats,
+  .detailGrid {
+    grid-template-columns: 1fr;
+  }
+}

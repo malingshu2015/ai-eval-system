@@ -122,13 +122,21 @@ export type Report = {
 export type RemediationTask = {
   id: string
   findingId: string
+  sourceTaskId: string
+  sourceReportId?: string
+  sourceReportName?: string
+  severity: Severity
   title: string
+  description?: string
   ownerId?: string
+  ownerName?: string
   dueDate?: string
   status: RemediationStatus
   actionPlan: string
   retestResult?: string
   closedAt?: string
+  createdAt: string
+  updatedAt: string
 }
 
 export type AuditEvent = {

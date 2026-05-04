@@ -16,6 +16,8 @@ import ProductBlueprint from '@/pages/blueprint/ProductBlueprint'
 import ChecklistLibrary from '@/pages/checklist/ChecklistLibrary'
 import Reports from '@/pages/reports/Reports'
 import ReportDetail from '@/pages/reports/ReportDetail'
+import RemediationCenter from '@/pages/remediation/RemediationCenter'
+import RemediationDetail from '@/pages/remediation/RemediationDetail'
 import Settings from '@/pages/settings/Settings'
 import Login from '@/pages/auth/Login'
 import { useAuthStore } from '@/stores/authStore'
@@ -95,6 +97,8 @@ export default function App() {
                 <Route path="checklists" element={<ChecklistLibrary />} />
                 <Route path="reports" element={<Reports />} />
                 <Route path="reports/:id" element={<ReportDetail />} />
+                <Route path="remediations" element={<RemediationCenter />} />
+                <Route path="remediations/:id" element={<RemediationDetail />} />
                 <Route path="pentest-hub" element={<PentestHub />} />
                 <Route path="settings" element={<Settings />} />
               </Route>

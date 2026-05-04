@@ -4,7 +4,7 @@
  */
 import {
   Button, Tag, Typography, Progress, Divider, Collapse,
-  Space, Table, Row, Col, Statistic, Alert,
+  Space, Table, Row, Col, Statistic, Alert, message,
 } from 'antd'
 import {
   ArrowLeftOutlined, DownloadOutlined, PrinterOutlined,
@@ -14,6 +14,7 @@ import {
 import { useNavigate, useParams } from 'react-router-dom'
 import type { RiskLevel, CheckResultStatus } from '@/types'
 import { getPentestReport, getReportEvidence, getReportFindings, getReportReview } from '@/utils/pentestReports'
+import { createRemediationTask, getRemediationTaskByFinding } from '@/utils/remediationTasks'
 import type { EvidenceStatus, Finding, Severity } from '@/types/domain'
 import { resolveReportTemplate, type ReportTemplateId } from '@/utils/reportTemplates'
 import styles from './ReportDetail.module.css'
@@ -383,7 +384,17 @@ export default function ReportDetail() {
       priority: findingPriorityLabel(finding.severity, index),
       action: findingActionText(finding, index),
       evidenceCount: structuredEvidence.filter((evidence) => evidence.findingId === finding.id).length,
+      remediationTask: getRemediationTaskByFinding(finding.id),
     }))
+
+    const handleCreateRemediation = (finding: Finding) => {
+      const task = createRemediationTask({
+        finding,
+        sourceReportId: pentestReport.id,
+        sourceReportName: pentestReport.name,
+      })
+      message.success(`已转入整改中心：${task.title}`)
+    }
 
     return (
       <div className={styles.container}>
@@ -491,7 +502,7 @@ export default function ReportDetail() {
           <section className={styles.reportBlock}>
             <div className={styles.blockTitle}>核心发现</div>
             <div className={styles.findingCards}>
-              {presentableFindings.map(({ finding, title, summary, priority, action, evidenceCount }, index) => (
+              {presentableFindings.map(({ finding, title, summary, priority, action, evidenceCount, remediationTask }, index) => (
                 <div className={styles.findingCard} key={finding.id}>
                   <div className={styles.findingIndex}>{String(index + 1).padStart(2, '0')}</div>
                   <div className={styles.findingMain}>
@@ -507,7 +518,16 @@ export default function ReportDetail() {
                       <span>建议：{action}</span>
                     </div>
                   </div>
-                  <div className={styles.findingPriority}>{priority}</div>
+                  <div className={styles.findingActions}>
+                    <div className={styles.findingPriority}>{remediationTask ? '已转整改' : priority}</div>
+                    <Button
+                      size="small"
+                      type={remediationTask ? 'default' : 'primary'}
+                      onClick={() => remediationTask ? navigate(`/remediations/${remediationTask.id}`) : handleCreateRemediation(finding)}
+                    >
+                      {remediationTask ? '查看整改' : '转整改'}
+                    </Button>
+                  </div>
                 </div>
               ))}
             </div>

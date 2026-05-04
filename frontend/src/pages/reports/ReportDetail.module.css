@@ -581,7 +581,6 @@
 }
 
 .findingPriority {
-  justify-self: end;
   padding: 6px 10px;
   color: #1d4ed8;
   background: #eff6ff;
@@ -590,6 +589,12 @@
   font-size: 12px;
   font-weight: 750;
   white-space: nowrap;
+}
+
+.findingActions {
+  display: grid;
+  justify-items: end;
+  gap: 8px;
 }
 
 .evidenceList {
@@ -712,8 +717,9 @@
     grid-template-columns: 1fr;
   }
 
-  .findingPriority {
+  .findingActions {
     justify-self: start;
+    justify-items: start;
   }
 
   .evidenceItem {

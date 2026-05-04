@@ -15,6 +15,7 @@ import {
   BellOutlined,
   SafetyOutlined,
   PartitionOutlined,
+  ToolOutlined,
 } from '@ant-design/icons'
 import { useAuthStore } from '@/stores/authStore'
 import styles from './MainLayout.module.css'
@@ -52,6 +53,11 @@ const menuItems = [
     key: '/reports',
     icon: <FileTextOutlined />,
     label: '报告中心',
+  },
+  {
+    key: '/remediations',
+    icon: <ToolOutlined />,
+    label: '整改中心',
   },
   {
     type: 'divider' as const,
