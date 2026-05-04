@@ -1,9 +1,10 @@
 import { Button, Empty, Space, Table, Tag, Typography } from 'antd'
 import { EyeOutlined, PlusOutlined, ToolOutlined } from '@ant-design/icons'
-import { useMemo } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import type { RemediationTask, Severity } from '@/types/domain'
 import {
+  fetchRemediationTasks,
   getRemediationTasks,
   remediationStatusColor,
   remediationStatusLabel,
@@ -30,7 +31,17 @@ const SEVERITY_COLOR: Record<Severity, string> = {
 
 export default function RemediationCenter() {
   const navigate = useNavigate()
-  const tasks = getRemediationTasks()
+  const [tasks, setTasks] = useState<RemediationTask[]>(() => getRemediationTasks())
+
+  useEffect(() => {
+    let mounted = true
+    fetchRemediationTasks().then((items) => {
+      if (mounted) setTasks(items)
+    })
+    return () => {
+      mounted = false
+    }
+  }, [])
 
   const stats = useMemo(() => ({
     total: tasks.length,

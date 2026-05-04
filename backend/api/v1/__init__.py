@@ -3,7 +3,7 @@ API v1 路由注册
 """
 from fastapi import APIRouter
 
-from api.v1.endpoints import auth, checklist, evaluation, health, runner, dashboard, report
+from api.v1.endpoints import auth, checklist, dashboard, evaluation, governance, health, report, runner
 
 router = APIRouter()
 
@@ -14,3 +14,4 @@ router.include_router(evaluation.router, prefix="/evaluations", tags=["评估会
 router.include_router(runner.router, prefix="/runner", tags=["工具执行"])
 router.include_router(dashboard.router, prefix="/dashboard", tags=["仪表盘"])
 router.include_router(report.router, prefix="/report", tags=["报告生成"])
+router.include_router(governance.router, tags=["治理闭环"])

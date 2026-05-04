@@ -1,4 +1,5 @@
 import type { AuditEvent } from '@/types/domain'
+import { governanceApi } from '@/api/governance'
 
 const STORAGE_KEY = 'ai-eval-audit-events'
 
@@ -53,6 +54,21 @@ export function getAuditEvents(): AuditEvent[] {
   }
 }
 
+export async function fetchAuditEvents(): Promise<AuditEvent[]> {
+  try {
+    const events = await governanceApi.getAuditEvents()
+    const localEvents = getAuditEvents()
+    const mergedEvents = [
+      ...events,
+      ...localEvents.filter((event) => !events.some((item) => item.id === event.id)),
+    ].slice(0, 200)
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(mergedEvents))
+    return mergedEvents
+  } catch {
+    return getAuditEvents()
+  }
+}
+
 export function recordAuditEvent(input: CreateAuditEventInput): AuditEvent {
   const event: AuditEvent = {
     id: `audit-${Date.now()}-${Math.random().toString(16).slice(2)}`,
@@ -69,6 +85,7 @@ export function recordAuditEvent(input: CreateAuditEventInput): AuditEvent {
   }
   const nextEvents = [event, ...getAuditEvents()].slice(0, 200)
   localStorage.setItem(STORAGE_KEY, JSON.stringify(nextEvents))
+  void governanceApi.createAuditEvent(event).catch(() => undefined)
   return event
 }
 

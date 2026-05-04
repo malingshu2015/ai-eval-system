@@ -1,8 +1,10 @@
 import { Button, Empty, Form, Input, Select, Space, Tag, Timeline, Typography, message } from 'antd'
 import { ArrowLeftOutlined, CheckCircleOutlined, ClockCircleOutlined } from '@ant-design/icons'
+import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import type { RemediationStatus, Severity } from '@/types/domain'
 import {
+  fetchRemediationTask,
   getRemediationTask,
   remediationStatusColor,
   remediationStatusLabel,
@@ -32,8 +34,22 @@ const STATUS_OPTIONS: Array<{ value: RemediationStatus; label: string }> = [
 export default function RemediationDetail() {
   const navigate = useNavigate()
   const { id } = useParams()
-  const task = id ? getRemediationTask(id) : undefined
+  const [task, setTask] = useState(() => id ? getRemediationTask(id) : undefined)
   const [form] = Form.useForm()
+
+  useEffect(() => {
+    if (!id) return
+
+    let mounted = true
+    fetchRemediationTask(id).then((item) => {
+      if (!mounted || !item) return
+      setTask(item)
+      form.setFieldsValue(item)
+    })
+    return () => {
+      mounted = false
+    }
+  }, [form, id])
 
   if (!task) {
     return (
@@ -45,7 +61,8 @@ export default function RemediationDetail() {
 
   const handleSave = () => {
     const values = form.getFieldsValue()
-    updateRemediationTask(task.id, values)
+    const nextTask = updateRemediationTask(task.id, values)
+    if (nextTask) setTask(nextTask)
     message.success('整改项已更新')
     navigate('/remediations')
   }

@@ -2,7 +2,7 @@
  * 系统设置页面
  * 管理模型供应商、权限、安全策略和审计日志
  */
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import {
   Alert,
   AutoComplete,
@@ -52,7 +52,7 @@ import {
   type LocalAccount,
 } from '@/utils/localAccounts'
 import type { AuditEvent } from '@/types/domain'
-import { auditResultColor, auditResultLabel, getAuditEvents, recordAuditEvent } from '@/utils/auditEvents'
+import { auditResultColor, auditResultLabel, fetchAuditEvents, getAuditEvents, recordAuditEvent } from '@/utils/auditEvents'
 
 const { Title, Text } = Typography
 
@@ -240,6 +240,16 @@ export default function Settings() {
   const [messageApi, contextHolder] = message.useMessage()
   const selectedVendor = Form.useWatch('vendor', form) ?? 'OpenAI-Compatible'
   const isLocalModelVendor = isLocalVendor(selectedVendor)
+
+  useEffect(() => {
+    let mounted = true
+    fetchAuditEvents().then((events) => {
+      if (mounted) setAuditLog(events)
+    })
+    return () => {
+      mounted = false
+    }
+  }, [])
 
   const enabledProviderCount = providers.filter((item) => item.status === 'enabled').length
   const activeUserCount = userAccounts.filter((item) => item.status === 'active').length

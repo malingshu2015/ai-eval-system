@@ -17,6 +17,13 @@ from model.evaluation import (
     SessionStatus,
     CheckResultStatus,
 )
+from model.governance import (
+    AuditEvent,
+    AuditResult,
+    RemediationStatus,
+    RemediationTask,
+    Severity,
+)
 
 __all__ = [
     "Base",
@@ -31,4 +38,9 @@ __all__ = [
     "CheckResult",
     "SessionStatus",
     "CheckResultStatus",
+    "AuditEvent",
+    "AuditResult",
+    "RemediationStatus",
+    "RemediationTask",
+    "Severity",
 ]

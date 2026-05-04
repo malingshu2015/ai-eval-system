@@ -1,4 +1,5 @@
 import type { Finding, RemediationStatus, RemediationTask } from '@/types/domain'
+import { governanceApi } from '@/api/governance'
 import { recordAuditEvent } from './auditEvents'
 
 const STORAGE_KEY = 'ai-eval-remediation-tasks'
@@ -30,6 +31,32 @@ export function getRemediationTaskByFinding(findingId: string): RemediationTask 
   return getRemediationTasks().find((task) => task.findingId === findingId)
 }
 
+export async function fetchRemediationTasks(): Promise<RemediationTask[]> {
+  try {
+    const tasks = await governanceApi.getRemediationTasks()
+    const localTasks = getRemediationTasks()
+    const mergedTasks = [
+      ...tasks,
+      ...localTasks.filter((task) => !tasks.some((item) => item.id === task.id)),
+    ]
+    saveRemediationTasks(mergedTasks)
+    return mergedTasks
+  } catch {
+    return getRemediationTasks()
+  }
+}
+
+export async function fetchRemediationTask(id: string): Promise<RemediationTask | undefined> {
+  try {
+    const task = await governanceApi.getRemediationTask(id)
+    const tasks = getRemediationTasks()
+    saveRemediationTasks([task, ...tasks.filter((item) => item.id !== task.id)])
+    return task
+  } catch {
+    return getRemediationTask(id)
+  }
+}
+
 export function saveRemediationTasks(tasks: RemediationTask[]) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(tasks))
 }
@@ -57,6 +84,7 @@ export function createRemediationTask(input: CreateRemediationInput): Remediatio
   }
 
   saveRemediationTasks([task, ...getRemediationTasks()])
+  void governanceApi.createRemediationTask(task).catch(() => undefined)
   recordAuditEvent({
     action: '创建整改项',
     targetType: 'remediation',
@@ -81,6 +109,7 @@ export function updateRemediationTask(id: string, updates: Partial<RemediationTa
   })
   saveRemediationTasks(tasks)
   if (updatedTask) {
+    void governanceApi.updateRemediationTask(updatedTask.id, updates).catch(() => undefined)
     recordAuditEvent({
       action: '更新整改项',
       targetType: 'remediation',
