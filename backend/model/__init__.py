@@ -17,6 +17,7 @@ from model.evaluation import (
     SessionStatus,
     CheckResultStatus,
 )
+from model.model_provider import ModelProvider, ModelProviderStatus
 from model.governance import (
     AuditEvent,
     AuditResult,
@@ -40,6 +41,8 @@ __all__ = [
     "CheckResult",
     "SessionStatus",
     "CheckResultStatus",
+    "ModelProvider",
+    "ModelProviderStatus",
     "AuditEvent",
     "AuditResult",
     "PentestReport",

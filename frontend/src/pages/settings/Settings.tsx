@@ -54,23 +54,19 @@ import {
 } from '@/utils/localAccounts'
 import type { AuditEvent } from '@/types/domain'
 import { auditResultColor, auditResultLabel, fetchAuditEvents, getAuditEvents, recordAuditEvent } from '@/utils/auditEvents'
+import {
+  createModelProvider,
+  fetchModelProviders,
+  getStoredModelProviders,
+  updateModelProvider,
+} from '@/utils/modelProviders'
+import type { ModelProviderRecord } from '@/api/modelProviders'
 
 const { Title, Text } = Typography
 
 type SettingsSection = 'models' | 'users' | 'roles' | 'security' | 'audit'
 
-type ModelProvider = {
-  id: string
-  name: string
-  vendor: string
-  baseUrl: string
-  defaultModel: string
-  scenario: string
-  status: 'enabled' | 'disabled'
-  latency: number
-  quota: number
-  updatedAt: string
-}
+type ModelProvider = ModelProviderRecord
 
 type UserAccount = {
   id: string
@@ -225,7 +221,7 @@ function toUserAccount(account: LocalAccount): UserAccount {
 
 export default function Settings() {
   const [activeSection, setActiveSection] = useState<SettingsSection>('models')
-  const [providers, setProviders] = useState<ModelProvider[]>(initialProviders)
+  const [providers, setProviders] = useState<ModelProvider[]>(() => getStoredModelProviders(initialProviders))
   const [userAccounts, setUserAccounts] = useState<UserAccount[]>(() => getLocalAccounts().map(toUserAccount))
   const [auditLog, setAuditLog] = useState<AuditEvent[]>(() => getAuditEvents())
   const [drawerOpen, setDrawerOpen] = useState(false)
@@ -249,6 +245,9 @@ export default function Settings() {
     })
     fetchAccounts().then((accounts) => {
       if (mounted) setUserAccounts(accounts.map(toUserAccount))
+    })
+    fetchModelProviders(initialProviders).then((items) => {
+      if (mounted) setProviders(items)
     })
     return () => {
       mounted = false
@@ -469,10 +468,13 @@ export default function Settings() {
       okText: '确认停用',
       okButtonProps: { danger: true },
       cancelText: '取消',
-      onOk: () => {
-        setProviders((items) => items.map((item) => (
-          item.id === provider.id ? { ...item, status: 'disabled', quota: 0, latency: 0 } : item
-        )))
+      onOk: async () => {
+        const nextProviders = await updateModelProvider(provider.id, {
+          status: 'disabled',
+          quota: 0,
+          latency: 0,
+        }, initialProviders)
+        setProviders(nextProviders)
         messageApi.success('模型供应商已停用')
         appendAudit({
           action: '停用模型供应商',
@@ -487,10 +489,10 @@ export default function Settings() {
   }
 
   function submitProvider() {
-    form.validateFields().then((values) => {
+    form.validateFields().then(async (values) => {
       const isLocalProvider = isLocalVendor(values.vendor)
       const localBaseUrl = values.vendor === 'Ollama' ? 'http://127.0.0.1:11434' : 'local-runtime'
-      const newProvider: ModelProvider = {
+      const newProvider = await createModelProvider({
         id: `mp-${Date.now()}`,
         name: values.name,
         vendor: values.vendor,
@@ -500,9 +502,10 @@ export default function Settings() {
         status: values.enabled ? 'enabled' : 'disabled',
         latency: values.enabled ? 520 : 0,
         quota: values.enabled ? 100 : 0,
-        updatedAt: '刚刚',
-      }
-      setProviders((items) => [newProvider, ...items])
+        timeout: values.timeout,
+        apiKey: isLocalProvider ? undefined : values.apiKey,
+      }, initialProviders)
+      setProviders((items) => [newProvider, ...items.filter((item) => item.id !== newProvider.id)])
       setDrawerOpen(false)
       form.resetFields()
       messageApi.success('模型供应商已添加')
@@ -670,8 +673,8 @@ export default function Settings() {
         type="warning"
         showIcon
         className={styles.sourceAlert}
-        message="当前系统设置页使用前端演示数据"
-        description="用户管理、登录事件、模型供应商操作、报告生成和整改流转已写入本地审计日志；模型供应商额度仍为页面状态数据。本机 Ollama 模型扫描会真实请求 127.0.0.1:11434。"
+        message="当前系统设置页已接入后端优先、本地兜底模式"
+        description="用户、模型供应商、审计、报告和整改会优先同步后端；后端不可用时保留浏览器本地数据。本机 Ollama 模型扫描会真实请求 127.0.0.1:11434。"
       />
 
       <Row gutter={[16, 16]} className={styles.overviewGrid}>
@@ -680,7 +683,7 @@ export default function Settings() {
             <CloudServerOutlined />
             <div>
               <strong>{enabledProviderCount}</strong>
-              <span>已启用模型供应商 · 演示</span>
+              <span>已启用模型供应商</span>
             </div>
           </div>
         </Col>
@@ -731,9 +734,9 @@ export default function Settings() {
           <div className={styles.sectionHeader}>
             <div>
               <h2>模型供应商</h2>
-              <p>配置第三方大模型、默认用途、调用额度和连通性状态。当前列表为演示数据。</p>
+              <p>配置第三方大模型、默认用途、调用额度和连通性状态。云端供应商密钥由后端加密保存，本地模型不需要 API Key。</p>
             </div>
-            <Tag color="orange">前端演示数据</Tag>
+            <Tag color="green">后端优先 / 本地兜底</Tag>
           </div>
           <Table
             rowKey="id"
@@ -952,7 +955,7 @@ export default function Settings() {
           type="info"
           showIcon
           message="该用户创建后可直接用于登录"
-          description="当前实现使用浏览器本地账号库，适合开发演示；接入后端鉴权后应改为服务端加密存储密码。"
+          description="系统会优先创建后端真实用户并使用安全哈希保存密码；后端不可用时保存到本地兜底账号库。"
           style={{ marginBottom: 16 }}
         />
         <Form form={userForm} layout="vertical">
