@@ -46,9 +46,10 @@ import styles from './Settings.module.css'
 import {
   ROLE_LABEL,
   ROLE_OPTIONS,
-  addLocalAccount,
+  addAccount,
+  fetchAccounts,
   getLocalAccounts,
-  updateLocalAccount,
+  updateAccount,
   type LocalAccount,
 } from '@/utils/localAccounts'
 import type { AuditEvent } from '@/types/domain'
@@ -245,6 +246,9 @@ export default function Settings() {
     let mounted = true
     fetchAuditEvents().then((events) => {
       if (mounted) setAuditLog(events)
+    })
+    fetchAccounts().then((accounts) => {
+      if (mounted) setUserAccounts(accounts.map(toUserAccount))
     })
     return () => {
       mounted = false
@@ -570,11 +574,11 @@ export default function Settings() {
   }
 
   function submitRole() {
-    roleForm.validateFields().then(({ role }) => {
+    roleForm.validateFields().then(async ({ role }) => {
       if (!roleModalUser) return
       const roleValue = ROLE_OPTIONS.find((item) => item.label === role)?.value
       if (roleValue) {
-        const accounts = updateLocalAccount(roleModalUser.id, { role: roleValue as LocalAccount['role'] })
+        const accounts = await updateAccount(roleModalUser.id, { role: roleValue as LocalAccount['role'] })
         setUserAccounts(accounts.map(toUserAccount))
       }
       setRoleModalUser(null)
@@ -597,7 +601,7 @@ export default function Settings() {
   }
 
   function submitUser() {
-    userForm.validateFields().then((values) => {
+    userForm.validateFields().then(async (values) => {
       const exists = getLocalAccounts().some((account) => (
         account.username === values.username || account.email === values.email
       ))
@@ -606,14 +610,14 @@ export default function Settings() {
         return
       }
 
-      addLocalAccount({
+      await addAccount({
         username: values.username,
         password: values.password,
         email: values.email,
         fullName: values.fullName,
         role: values.role,
       })
-      setUserAccounts(getLocalAccounts().map(toUserAccount))
+      setUserAccounts((await fetchAccounts()).map(toUserAccount))
       setUserDrawerOpen(false)
       messageApi.success(`用户 ${values.username} 已创建，可用于登录`)
       appendAudit({
@@ -621,14 +625,14 @@ export default function Settings() {
         targetType: 'user',
         targetName: values.username,
         result: 'success',
-        summary: '创建本地可登录账号。',
+        summary: '创建可登录账号；后端不可用时保存到本地兜底。',
       })
     })
   }
 
-  function toggleUserStatus(user: UserAccount) {
+  async function toggleUserStatus(user: UserAccount) {
     const nextStatus = user.status === 'disabled' ? 'active' : 'disabled'
-    const accounts = updateLocalAccount(user.id, { status: nextStatus })
+    const accounts = await updateAccount(user.id, { status: nextStatus })
     setUserAccounts(accounts.map(toUserAccount))
     messageApi.success(`${user.name} 已${nextStatus === 'active' ? '启用' : '禁用'}`)
     appendAudit({

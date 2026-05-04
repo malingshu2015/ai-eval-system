@@ -5,7 +5,7 @@ import { Form, Input, Button, Typography, message } from 'antd'
 import { UserOutlined, LockOutlined, SafetyOutlined } from '@ant-design/icons'
 import { useNavigate } from 'react-router-dom'
 import { useAuthStore } from '@/stores/authStore'
-import { authenticateLocalAccount } from '@/utils/localAccounts'
+import { authenticateAccount } from '@/utils/localAccounts'
 import { recordAuditEvent } from '@/utils/auditEvents'
 
 const { Title, Text } = Typography
@@ -14,10 +14,11 @@ export default function Login() {
   const navigate = useNavigate()
   const { login } = useAuthStore()
 
-  const handleSubmit = (values: { username: string; password: string }) => {
-    const user = authenticateLocalAccount(values.username, values.password)
-    if (user) {
-      login(`local-token-${user.id}`, user)
+  const handleSubmit = async (values: { username: string; password: string }) => {
+    const result = await authenticateAccount(values.username, values.password)
+    if (result) {
+      const { token, user } = result
+      login(token, user)
       recordAuditEvent({
         actorId: user.id,
         actorName: user.username,
@@ -26,7 +27,7 @@ export default function Login() {
         targetId: user.id,
         targetName: user.username,
         result: 'success',
-        summary: '用户通过本地账号登录系统。',
+        summary: token.startsWith('local-token-') ? '用户通过本地账号登录系统。' : '用户通过后端账号登录系统。',
       })
       navigate('/dashboard')
     } else {

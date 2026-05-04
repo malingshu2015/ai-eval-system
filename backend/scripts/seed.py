@@ -300,6 +300,7 @@ SEED_DATA = [
 
 
 from model.user import User
+from core.security import hash_password
 from scripts.seed_data import SEED_DATA_FULL as SEED_DATA
 
 async def seed():
@@ -315,7 +316,7 @@ async def seed():
             admin_user = User(
                 username="admin",
                 email="admin@example.com",
-                hashed_password="dummy",
+                hashed_password=hash_password("admin123"),
                 is_active=True,
                 role="super_admin"
             )

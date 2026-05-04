@@ -26,7 +26,7 @@ class User(Base):
 
     username: Mapped[str] = mapped_column(String(64), unique=True, nullable=False, index=True)
     email: Mapped[str] = mapped_column(String(256), unique=True, nullable=False, index=True)
-    # NOTE: 密码使用 bcrypt 哈希存储，禁止明文
+    # NOTE: 密码使用强哈希存储，禁止明文
     hashed_password: Mapped[str] = mapped_column(String(256), nullable=False)
     full_name: Mapped[Optional[str]] = mapped_column(String(128))
     role: Mapped[UserRole] = mapped_column(
