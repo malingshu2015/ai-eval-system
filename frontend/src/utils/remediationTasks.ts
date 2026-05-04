@@ -1,4 +1,5 @@
 import type { Finding, RemediationStatus, RemediationTask } from '@/types/domain'
+import { recordAuditEvent } from './auditEvents'
 
 const STORAGE_KEY = 'ai-eval-remediation-tasks'
 
@@ -56,6 +57,14 @@ export function createRemediationTask(input: CreateRemediationInput): Remediatio
   }
 
   saveRemediationTasks([task, ...getRemediationTasks()])
+  recordAuditEvent({
+    action: '创建整改项',
+    targetType: 'remediation',
+    targetId: task.id,
+    targetName: task.title,
+    result: 'success',
+    summary: `风险发现 ${input.finding.id} 已转入整改中心。`,
+  })
   return task
 }
 
@@ -71,6 +80,16 @@ export function updateRemediationTask(id: string, updates: Partial<RemediationTa
     return updatedTask
   })
   saveRemediationTasks(tasks)
+  if (updatedTask) {
+    recordAuditEvent({
+      action: '更新整改项',
+      targetType: 'remediation',
+      targetId: updatedTask.id,
+      targetName: updatedTask.title,
+      result: 'success',
+      summary: `整改项状态更新为 ${remediationStatusLabel(updatedTask.status)}。`,
+    })
+  }
   return updatedTask
 }
 

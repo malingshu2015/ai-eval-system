@@ -6,6 +6,7 @@ import { UserOutlined, LockOutlined, SafetyOutlined } from '@ant-design/icons'
 import { useNavigate } from 'react-router-dom'
 import { useAuthStore } from '@/stores/authStore'
 import { authenticateLocalAccount } from '@/utils/localAccounts'
+import { recordAuditEvent } from '@/utils/auditEvents'
 
 const { Title, Text } = Typography
 
@@ -17,8 +18,26 @@ export default function Login() {
     const user = authenticateLocalAccount(values.username, values.password)
     if (user) {
       login(`local-token-${user.id}`, user)
+      recordAuditEvent({
+        actorId: user.id,
+        actorName: user.username,
+        action: '登录成功',
+        targetType: 'auth',
+        targetId: user.id,
+        targetName: user.username,
+        result: 'success',
+        summary: '用户通过本地账号登录系统。',
+      })
       navigate('/dashboard')
     } else {
+      recordAuditEvent({
+        actorName: values.username,
+        action: '登录失败',
+        targetType: 'auth',
+        targetName: values.username,
+        result: 'failed',
+        summary: '用户名、密码错误或账号已禁用。',
+      })
       message.error('用户名、密码错误或账号已禁用')
     }
   }

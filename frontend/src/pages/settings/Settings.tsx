@@ -51,6 +51,8 @@ import {
   updateLocalAccount,
   type LocalAccount,
 } from '@/utils/localAccounts'
+import type { AuditEvent } from '@/types/domain'
+import { auditResultColor, auditResultLabel, getAuditEvents, recordAuditEvent } from '@/utils/auditEvents'
 
 const { Title, Text } = Typography
 
@@ -88,17 +90,6 @@ type PermissionRole = {
   report: boolean
   security: boolean
   audit: boolean
-}
-
-type AuditEvent = {
-  id: string
-  time: string
-  operator: string
-  action: string
-  target: string
-  result: 'success' | 'failed' | 'warning'
-  ip: string
-  detail: string
 }
 
 type LocalModelOption = {
@@ -157,13 +148,6 @@ const permissionRoles: PermissionRole[] = [
   { role: '评估员', description: '创建、执行并查看授权范围内的评估', model: false, user: false, evaluation: true, report: true, security: false, audit: false },
   { role: '查看者', description: '只读访问报告和评估结果', model: false, user: false, evaluation: false, report: true, security: false, audit: false },
   { role: '审计员', description: '只读查看审计日志和安全事件', model: false, user: false, evaluation: false, report: false, security: false, audit: true },
-]
-
-const auditEvents: AuditEvent[] = [
-  { id: 'a-1', time: '2026-05-03 09:44:21', operator: 'Robin Xie', action: '测试模型连接', target: 'OpenAI 主通道', result: 'success', ip: '10.12.8.21', detail: '连接成功，响应耗时 684ms' },
-  { id: 'a-2', time: '2026-05-02 18:30:10', operator: 'Robin Xie', action: '替换 API Key', target: 'OpenAI 主通道', result: 'warning', ip: '10.12.8.21', detail: '高风险密钥变更，已触发二次确认' },
-  { id: 'a-3', time: '2026-05-02 16:08:37', operator: '安全评估员', action: '导出评估报告', target: 'RPT-20260502-004', result: 'success', ip: '10.12.9.18', detail: '导出 PDF 报告' },
-  { id: 'a-4', time: '2026-05-01 20:12:02', operator: '未知账号', action: '登录失败', target: 'admin@example.com', result: 'failed', ip: '203.0.113.42', detail: '连续失败 5 次，账号已临时锁定' },
 ]
 
 const sectionOptions = [
@@ -242,6 +226,7 @@ export default function Settings() {
   const [activeSection, setActiveSection] = useState<SettingsSection>('models')
   const [providers, setProviders] = useState<ModelProvider[]>(initialProviders)
   const [userAccounts, setUserAccounts] = useState<UserAccount[]>(() => getLocalAccounts().map(toUserAccount))
+  const [auditLog, setAuditLog] = useState<AuditEvent[]>(() => getAuditEvents())
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [userDrawerOpen, setUserDrawerOpen] = useState(false)
   const [auditDetail, setAuditDetail] = useState<AuditEvent | null>(null)
@@ -258,7 +243,7 @@ export default function Settings() {
 
   const enabledProviderCount = providers.filter((item) => item.status === 'enabled').length
   const activeUserCount = userAccounts.filter((item) => item.status === 'active').length
-  const latestRiskEvent = auditEvents.find((item) => item.result !== 'success')
+  const latestRiskEvent = auditLog.find((item) => item.result !== 'success')
   const baselineChecks: BaselineCheck[] = [
     {
       name: '模型供应商可用性',
@@ -407,17 +392,17 @@ export default function Settings() {
   ]
 
   const auditColumns: ColumnsType<AuditEvent> = [
-    { title: '时间', dataIndex: 'time', width: 170 },
-    { title: '操作人', dataIndex: 'operator', width: 120 },
+    { title: '时间', dataIndex: 'createdAt', width: 180 },
+    { title: '操作人', dataIndex: 'actorName', width: 130, render: (value?: string) => value || '未知用户' },
     { title: '操作类型', dataIndex: 'action', width: 140 },
-    { title: '对象', dataIndex: 'target' },
+    { title: '对象', dataIndex: 'targetName', render: (value?: string, record) => value || record.targetId || record.targetType },
     {
       title: '结果',
       dataIndex: 'result',
       width: 90,
-      render: (value: AuditEvent['result']) => <Tag color={statusColor[value]}>{statusText[value]}</Tag>,
+      render: (value: AuditEvent['result']) => <Tag color={auditResultColor(value)}>{auditResultLabel(value)}</Tag>,
     },
-    { title: '来源 IP', dataIndex: 'ip', width: 140 },
+    { title: '来源', dataIndex: 'sourceIp', width: 140, render: (value?: string) => value || 'local-browser' },
     {
       title: '详情',
       width: 90,
@@ -434,12 +419,33 @@ export default function Settings() {
     return defaultProvider ? `${defaultProvider.name} · ${defaultProvider.defaultModel}` : '未配置'
   }, [providers])
 
+  function appendAudit(input: Parameters<typeof recordAuditEvent>[0]) {
+    recordAuditEvent(input)
+    setAuditLog(getAuditEvents())
+  }
+
   function testProvider(provider: ModelProvider) {
     if (provider.status === 'disabled') {
       messageApi.warning('该供应商已停用，请启用后再测试连接')
+      appendAudit({
+        action: '测试模型连接',
+        targetType: 'model-provider',
+        targetId: provider.id,
+        targetName: provider.name,
+        result: 'warning',
+        summary: '供应商已停用，未执行连接测试。',
+      })
       return
     }
     messageApi.success(`${provider.name} 连接正常，最近响应 ${provider.latency}ms`)
+    appendAudit({
+      action: '测试模型连接',
+      targetType: 'model-provider',
+      targetId: provider.id,
+      targetName: provider.name,
+      result: 'success',
+      summary: `连接成功，响应耗时 ${provider.latency}ms。`,
+    })
   }
 
   function confirmDisableProvider(provider: ModelProvider) {
@@ -454,6 +460,14 @@ export default function Settings() {
           item.id === provider.id ? { ...item, status: 'disabled', quota: 0, latency: 0 } : item
         )))
         messageApi.success('模型供应商已停用')
+        appendAudit({
+          action: '停用模型供应商',
+          targetType: 'model-provider',
+          targetId: provider.id,
+          targetName: provider.name,
+          result: 'warning',
+          summary: '模型供应商已停用，将不再参与评估任务调度。',
+        })
       },
     })
   }
@@ -478,6 +492,14 @@ export default function Settings() {
       setDrawerOpen(false)
       form.resetFields()
       messageApi.success('模型供应商已添加')
+      appendAudit({
+        action: '新增模型供应商',
+        targetType: 'model-provider',
+        targetId: newProvider.id,
+        targetName: newProvider.name,
+        result: 'success',
+        summary: `新增 ${newProvider.vendor} 供应商，默认模型 ${newProvider.defaultModel}。`,
+      })
     })
   }
 
@@ -547,6 +569,14 @@ export default function Settings() {
       }
       setRoleModalUser(null)
       messageApi.success(`${roleModalUser.name} 的角色已更新为 ${role}`)
+      appendAudit({
+        action: '分配用户角色',
+        targetType: 'user',
+        targetId: roleModalUser.id,
+        targetName: roleModalUser.name,
+        result: 'success',
+        summary: `用户角色已更新为 ${role}。`,
+      })
     })
   }
 
@@ -576,6 +606,13 @@ export default function Settings() {
       setUserAccounts(getLocalAccounts().map(toUserAccount))
       setUserDrawerOpen(false)
       messageApi.success(`用户 ${values.username} 已创建，可用于登录`)
+      appendAudit({
+        action: '新增登录用户',
+        targetType: 'user',
+        targetName: values.username,
+        result: 'success',
+        summary: '创建本地可登录账号。',
+      })
     })
   }
 
@@ -584,6 +621,14 @@ export default function Settings() {
     const accounts = updateLocalAccount(user.id, { status: nextStatus })
     setUserAccounts(accounts.map(toUserAccount))
     messageApi.success(`${user.name} 已${nextStatus === 'active' ? '启用' : '禁用'}`)
+    appendAudit({
+      action: nextStatus === 'active' ? '启用用户' : '禁用用户',
+      targetType: 'user',
+      targetId: user.id,
+      targetName: user.name,
+      result: 'warning',
+      summary: `用户状态变更为 ${nextStatus === 'active' ? '正常' : '禁用'}。`,
+    })
   }
 
   function openBaselineCheck() {
@@ -612,7 +657,7 @@ export default function Settings() {
         showIcon
         className={styles.sourceAlert}
         message="当前系统设置页使用前端演示数据"
-        description="模型供应商、权限矩阵、审计事件和额度仍为演示数据；用户管理已改为本地账号库，新增用户可在登录页使用。本机 Ollama 模型扫描会真实请求 127.0.0.1:11434。"
+        description="用户管理、登录事件、模型供应商操作、报告生成和整改流转已写入本地审计日志；模型供应商额度仍为页面状态数据。本机 Ollama 模型扫描会真实请求 127.0.0.1:11434。"
       />
 
       <Row gutter={[16, 16]} className={styles.overviewGrid}>
@@ -647,8 +692,8 @@ export default function Settings() {
           <div className={styles.metricPanel}>
             <AuditOutlined />
             <div>
-              <strong>{latestRiskEvent ? '1' : '0'}</strong>
-              <span>待关注审计事件 · 演示</span>
+              <strong>{auditLog.filter((item) => item.result !== 'success').length}</strong>
+              <span>待关注审计事件</span>
             </div>
           </div>
         </Col>
@@ -787,7 +832,7 @@ export default function Settings() {
           <div className={styles.sectionHeader}>
             <div>
               <h2>审计日志</h2>
-              <p>记录登录、权限、模型配置、报告导出等关键操作。当前事件为演示审计数据。</p>
+              <p>记录登录、权限、模型配置、报告生成、整改流转等关键操作。演示事件和本地真实操作会统一呈现。</p>
             </div>
             <Space>
               <Select defaultValue="全部结果" style={{ width: 130 }} options={[
@@ -799,7 +844,7 @@ export default function Settings() {
               <Button>导出 CSV</Button>
             </Space>
           </div>
-          <Table rowKey="id" columns={auditColumns} dataSource={auditEvents} pagination={false} scroll={{ x: 980 }} />
+          <Table rowKey="id" columns={auditColumns} dataSource={auditLog} pagination={false} scroll={{ x: 980 }} />
         </section>
       )}
 
@@ -993,9 +1038,11 @@ export default function Settings() {
             <Descriptions.Item label="操作对象">{auditDetail.target}</Descriptions.Item>
             <Descriptions.Item label="来源 IP">{auditDetail.ip}</Descriptions.Item>
             <Descriptions.Item label="结果">
-              <Tag color={statusColor[auditDetail.result]}>{statusText[auditDetail.result]}</Tag>
+              <Tag color={auditResultColor(auditDetail.result)}>{auditResultLabel(auditDetail.result)}</Tag>
             </Descriptions.Item>
-            <Descriptions.Item label="摘要">{auditDetail.detail}</Descriptions.Item>
+            <Descriptions.Item label="对象">{auditDetail.targetName || auditDetail.targetId || auditDetail.targetType}</Descriptions.Item>
+            <Descriptions.Item label="来源">{auditDetail.sourceIp || 'local-browser'}</Descriptions.Item>
+            <Descriptions.Item label="摘要">{auditDetail.summary}</Descriptions.Item>
           </Descriptions>
         )}
       </Modal>

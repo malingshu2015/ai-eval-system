@@ -142,9 +142,13 @@ export type RemediationTask = {
 export type AuditEvent = {
   id: string
   actorId?: string
+  actorName?: string
   action: string
   targetType: string
   targetId?: string
+  targetName?: string
+  result: 'success' | 'failed' | 'warning'
+  sourceIp?: string
   summary: string
   createdAt: string
 }
