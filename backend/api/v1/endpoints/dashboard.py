@@ -6,25 +6,40 @@ from sqlalchemy.orm import selectinload
 from core.database import get_db
 from model.evaluation import EvaluationSession, CheckResult, CheckResultStatus, SessionStatus
 from model.checklist import CheckItem, RiskLevel
+from model.user import User, UserRole
+from core.deps import RequireAuditorOrAbove, get_current_user
 from schema.dashboard import DashboardStatsResponse, SummaryStat, RiskDistribution, RecentFinding
 
 router = APIRouter()
 
-@router.get("/stats", response_model=DashboardStatsResponse)
-async def get_dashboard_stats(db: AsyncSession = Depends(get_db)):
+@router.get("/stats", response_model=DashboardStatsResponse, dependencies=[RequireAuditorOrAbove])
+async def get_dashboard_stats(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
     try:
-        # 1. 基础统计 (确保返回 0 而不是 None)
-        total_sessions = (await db.scalar(select(func.count(EvaluationSession.id)))) or 0
-        active_sessions = (await db.scalar(
-            select(func.count(EvaluationSession.id)).where(EvaluationSession.status == SessionStatus.IN_PROGRESS)
-        )) or 0
-        total_results = (await db.scalar(select(func.count(CheckResult.id)))) or 0
-        fail_results = (await db.scalar(
-            select(func.count(CheckResult.id)).where(CheckResult.status == CheckResultStatus.FAIL)
-        )) or 0
-        pass_results = (await db.scalar(
-            select(func.count(CheckResult.id)).where(CheckResult.status == CheckResultStatus.PASS)
-        )) or 0
+        # 0. 数据隔离逻辑 (Sprint 7.4)
+        is_admin = current_user.role == UserRole.SUPER_ADMIN
+
+        # 1. 基础统计
+        total_stmt = select(func.count(EvaluationSession.id))
+        active_stmt = select(func.count(EvaluationSession.id)).where(EvaluationSession.status == SessionStatus.IN_PROGRESS)
+        
+        if not is_admin:
+            total_stmt = total_stmt.where(EvaluationSession.assignee_id == current_user.id)
+            active_stmt = active_stmt.where(EvaluationSession.assignee_id == current_user.id)
+
+        total_sessions = (await db.scalar(total_stmt)) or 0
+        active_sessions = (await db.scalar(active_stmt)) or 0
+
+        # 检查结果统计
+        res_stmt = select(func.count(CheckResult.id)).join(EvaluationSession)
+        if not is_admin:
+            res_stmt = res_stmt.where(EvaluationSession.assignee_id == current_user.id)
+        
+        total_results = (await db.scalar(res_stmt)) or 0
+        fail_results = (await db.scalar(res_stmt.where(CheckResult.status == CheckResultStatus.FAIL))) or 0
+        pass_results = (await db.scalar(res_stmt.where(CheckResult.status == CheckResultStatus.PASS))) or 0
 
         # 2. 风险等级分布 (强制转换 key 为 string 避免匹配失败)
         risk_stmt = (

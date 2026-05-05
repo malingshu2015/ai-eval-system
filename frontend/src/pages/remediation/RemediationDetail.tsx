@@ -68,7 +68,7 @@ export default function RemediationDetail() {
   }
 
   return (
-    <div className={styles.page}>
+    <div className={styles.page} data-testid="remediation-detail">
       <div className={styles.header}>
         <Space>
           <Button icon={<ArrowLeftOutlined />} type="text" onClick={() => navigate('/remediations')} />
@@ -122,7 +122,7 @@ export default function RemediationDetail() {
             }}
           >
             <Form.Item label="状态" name="status">
-              <Select options={STATUS_OPTIONS} />
+              <Select options={STATUS_OPTIONS} data-testid="remediation-status-select" />
             </Form.Item>
             <Form.Item label="责任人" name="ownerName">
               <Input placeholder="例如：安全管理员" />
@@ -134,9 +134,9 @@ export default function RemediationDetail() {
               <Input.TextArea rows={4} />
             </Form.Item>
             <Form.Item label="复测结果" name="retestResult">
-              <Input.TextArea rows={3} placeholder="记录复测结论、证据或关闭说明" />
+              <Input.TextArea rows={3} placeholder="记录复测结论、证据或关闭说明" data-testid="retest-result-input" />
             </Form.Item>
-            <Button type="primary" block onClick={handleSave}>保存整改进度</Button>
+            <Button type="primary" block onClick={handleSave} data-testid="save-remediation-button">保存整改进度</Button>
           </Form>
 
           <div className={styles.metaList} style={{ marginTop: 18 }}>

@@ -8,6 +8,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.database import get_db
+from core.deps import RequireAuditorOrAbove, RequireWriter
 from core.security import encrypt_secret
 from model.model_provider import ModelProvider
 from schema.model_provider import ModelProviderCreate, ModelProviderResponse, ModelProviderUpdate
@@ -33,16 +34,16 @@ def to_response(provider: ModelProvider) -> ModelProviderResponse:
     )
 
 
-@router.get("", response_model=List[ModelProviderResponse], response_model_by_alias=True)
+@router.get("", response_model=List[ModelProviderResponse], response_model_by_alias=True, dependencies=[RequireAuditorOrAbove])
 async def list_model_providers(db: AsyncSession = Depends(get_db)):
-    """查询模型供应商配置。"""
+    """查询模型供应商配置（需要：auditor 及以上角色）"""
     result = await db.execute(select(ModelProvider).order_by(ModelProvider.updated_at.desc()))
     return [to_response(provider) for provider in result.scalars().all()]
 
 
-@router.post("", response_model=ModelProviderResponse, response_model_by_alias=True)
+@router.post("", response_model=ModelProviderResponse, response_model_by_alias=True, dependencies=[RequireWriter])
 async def create_model_provider(payload: ModelProviderCreate, db: AsyncSession = Depends(get_db)):
-    """创建模型供应商配置，密钥仅加密保存。"""
+    """创建模型供应商配置（需要：eval_engineer 及以上角色）"""
     existing = await db.get(ModelProvider, payload.id)
     if existing:
         return to_response(existing)
@@ -66,13 +67,13 @@ async def create_model_provider(payload: ModelProviderCreate, db: AsyncSession =
     return to_response(provider)
 
 
-@router.patch("/{provider_id}", response_model=ModelProviderResponse, response_model_by_alias=True)
+@router.patch("/{provider_id}", response_model=ModelProviderResponse, response_model_by_alias=True, dependencies=[RequireWriter])
 async def update_model_provider(
     provider_id: str,
     payload: ModelProviderUpdate,
     db: AsyncSession = Depends(get_db),
 ):
-    """更新模型供应商配置。"""
+    """更新模型供应商配置（需要：eval_engineer 及以上角色）"""
     provider = await db.get(ModelProvider, provider_id)
     if not provider:
         raise HTTPException(status_code=404, detail="模型供应商不存在")

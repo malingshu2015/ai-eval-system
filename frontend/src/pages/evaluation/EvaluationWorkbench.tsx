@@ -6,7 +6,7 @@ import { useState, useMemo, useEffect } from 'react'
 import {
   Button, Tag, Radio, Input, Upload, Typography,
   Progress, Badge, Divider, Space, message,
-  Tooltip, Empty, Spin
+  Tooltip, Empty, Spin, Alert
 } from 'antd'
 import {
   CheckCircleOutlined, CloseCircleOutlined, MinusCircleOutlined,
@@ -19,7 +19,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import styles from './EvaluationWorkbench.module.css'
 import type { CheckResultStatus } from '@/types'
-import { evaluationApi, type CheckResult } from '@/api/evaluation'
+import { evaluationApi, type CheckResult, type PocTaskStatus } from '@/api/evaluation'
 import { checklistApi } from '@/api/checklist'
 import { TOOL_REGISTRY as ALL_TOOLS } from './workbench-data'
 
@@ -38,6 +38,18 @@ const RISK_COLORS: Record<string, string> = { critical: '#ff3b5c', high: '#ff6b3
 const RISK_LABELS: Record<string, string> = { critical: '严重', high: '高危', medium: '中危', low: '低危', info: '信息' }
 const TYPE_COLOR: Record<string, string> = { cli: '#2563eb', api: '#06b6d4', script: '#8b5cf6', manual: '#64748b' }
 const TYPE_LABEL: Record<string, string> = { cli: 'CLI', api: 'API', script: '脚本', manual: '手动' }
+const CONFIDENCE_LABELS: Record<string, string> = { high: '高可信', medium: '中可信', low: '低可信', unknown: '未评估' }
+const CONFIDENCE_COLORS: Record<string, string> = { high: 'green', medium: 'orange', low: 'red', unknown: 'default' }
+
+function parseEvidenceJson(evidence?: string) {
+  if (!evidence) return {}
+  try {
+    const parsed = JSON.parse(evidence)
+    return parsed && typeof parsed === 'object' ? parsed as Record<string, unknown> : {}
+  } catch {
+    return { raw: evidence }
+  }
+}
 
 // ===== 工具卡片 =====
 
@@ -215,6 +227,8 @@ export default function EvaluationWorkbench() {
   const [activeItemId, setActiveItemId] = useState<string>('')
   const [activeTab, setActiveTab] = useState<'info' | 'terminal' | 'report'>('info')
   const [terminalOutput, setTerminalOutput] = useState<string>('')
+  const [pocTask, setPocTask] = useState<PocTaskStatus | null>(null)
+  const [pocTaskId, setPocTaskId] = useState<string>('')
   
   // 乐观 UI 状态：用于解决点击响应迟钝问题
   const [localStatus, setLocalStatus] = useState<string | undefined>(undefined)
@@ -263,9 +277,66 @@ export default function EvaluationWorkbench() {
     } else {
       setLocalStatus('pending')
     }
+    setPocTask(null)
+    setPocTaskId('')
   }, [activeItemId, activeResult?.status])
 
+  const pocStatusQuery = useQuery({
+    queryKey: ['poc-task', sessionId, activeItemId, pocTaskId],
+    queryFn: () => evaluationApi.getPocTaskStatus(sessionId!, activeItemId, pocTaskId),
+    enabled: !!sessionId && !!activeItemId && !!pocTaskId,
+    refetchInterval: (query) => {
+      const state = query.state.data?.task_state
+      return state === 'PENDING' || state === 'STARTED' || state === 'RETRY' ? 1500 : false
+    },
+  })
+
+  useEffect(() => {
+    if (!pocStatusQuery.data) return
+    setPocTask(pocStatusQuery.data)
+    if (['SUCCESS', 'FAILURE', 'REVOKED'].includes(pocStatusQuery.data.task_state)) {
+      queryClient.invalidateQueries({ queryKey: ['session', sessionId] })
+    }
+  }, [pocStatusQuery.data, queryClient, sessionId])
+
   const [ws, setWs] = useState<WebSocket | null>(null)
+
+  const runPocMutation = useMutation({
+    mutationFn: () => evaluationApi.runPoc(sessionId!, activeItemId),
+    onMutate: () => {
+      setActiveTab('report')
+      setPocTask(null)
+      setPocTaskId('')
+    },
+    onSuccess: (response) => {
+      message.success(response.message)
+      if (response.task_id) {
+        setPocTaskId(response.task_id)
+      }
+      queryClient.invalidateQueries({ queryKey: ['session', sessionId] })
+    },
+    onError: () => {
+      message.error('PoC 任务提交失败，请检查后端服务状态')
+    },
+  })
+
+  const handleExportReport = async () => {
+    if (!sessionId) return
+    const reportWindow = window.open('', '_blank', 'noopener,noreferrer')
+    try {
+      const reportBlob = await evaluationApi.exportReportHtml(sessionId)
+      const reportUrl = URL.createObjectURL(reportBlob)
+      if (reportWindow) {
+        reportWindow.location.href = reportUrl
+      } else {
+        window.location.href = reportUrl
+      }
+      window.setTimeout(() => URL.revokeObjectURL(reportUrl), 60_000)
+    } catch {
+      reportWindow?.close()
+      message.error('报告导出失败，请确认当前账号有报告查看权限')
+    }
+  }
 
   // 真实 WebSocket 终端执行
   const handleRunTool = (toolId: string) => {
@@ -371,6 +442,13 @@ export default function EvaluationWorkbench() {
   const totalItems = allItems.length
   const completedItems = session?.results?.filter(r => r.status !== 'pending').length || 0
   const progressPercent = totalItems === 0 ? 0 : Math.round((completedItems / totalItems) * 100)
+  const activeEvidence = useMemo(() => parseEvidenceJson(activeResult?.evidence), [activeResult?.evidence])
+  const confidenceLevel = activeResult?.confidence_level || 'unknown'
+  const confidenceScore = activeResult?.confidence_score ?? 0
+  const diagnosisCode = String(pocTask?.diagnosis_code || activeEvidence.diagnosisCode || '未记录')
+  const diagnosisMessage = String(pocTask?.diagnosis_message || activeEvidence.diagnosisMessage || '暂无诊断信息')
+  const hasBackendPoc = Boolean(activeItem?.poc_code)
+  const isPocRunning = runPocMutation.isPending || ['PENDING', 'STARTED', 'RETRY'].includes(pocTask?.task_state || '')
 
   // ===== Hooks 必须放在所有早期 return 之前 =====
   const hasAutoTools = useMemo(() => {
@@ -402,7 +480,7 @@ export default function EvaluationWorkbench() {
   }
 
   return (
-    <div className={styles.workbench}>
+    <div className={styles.workbench} data-testid="evaluation-workbench">
       {/* 顶部栏 */}
       <div className={styles.header}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
@@ -455,7 +533,8 @@ export default function EvaluationWorkbench() {
           <Button 
             type="primary" 
             style={{ background: '#22c55e' }} 
-            onClick={() => window.open(`http://localhost:8000/api/v1/report/${sessionId}/report`, '_blank')}
+            onClick={handleExportReport}
+            data-testid="export-report-button"
           >
             导出评估报告
           </Button>
@@ -530,6 +609,19 @@ export default function EvaluationWorkbench() {
                       {activeItem.description}
                     </Paragraph>
                   </div>
+                  <Space>
+                    <Tooltip title={hasBackendPoc ? '执行后端登记的 PoC 脚本，并自动回填证据、置信度和诊断信息' : '该检查项未配置后端 PoC 脚本'}>
+                      <Button
+                        type="primary"
+                        icon={<PlayCircleOutlined />}
+                        loading={isPocRunning}
+                        disabled={!hasBackendPoc}
+                        onClick={() => runPocMutation.mutate()}
+                      >
+                        运行自动化 PoC
+                      </Button>
+                    </Tooltip>
+                  </Space>
                 </div>
               </div>
 
@@ -553,6 +645,7 @@ export default function EvaluationWorkbench() {
                   <div
                     className={`${styles.tab} ${activeTab === 'report' ? styles.tabActive : ''}`}
                     onClick={() => setActiveTab('report')}
+                    data-testid="result-tab"
                   >
                     <SafetyCertificateOutlined /> 结果判读与取证
                   </div>
@@ -685,6 +778,61 @@ export default function EvaluationWorkbench() {
                   {/* Tab 3: 结果录入 */}
                   {activeTab === 'report' && (
                     <div className={styles.resultArea}>
+                      <div className={styles.pocPanel} data-testid="poc-panel">
+                        <div className={styles.pocPanelHeader}>
+                          <div>
+                            <Text strong>自动化 PoC 执行状态</Text>
+                            <Text type="secondary" style={{ display: 'block', fontSize: 12 }}>
+                              后端执行结果会自动回填检查结论、证据、置信度和报告取证链。
+                            </Text>
+                          </div>
+                          <Space>
+                            <Tag color={CONFIDENCE_COLORS[confidenceLevel]}>
+                              {CONFIDENCE_LABELS[confidenceLevel]} · {confidenceScore}%
+                            </Tag>
+                            <Button
+                              type="primary"
+                              icon={<PlayCircleOutlined />}
+                              loading={isPocRunning}
+                              disabled={!hasBackendPoc}
+                              onClick={() => runPocMutation.mutate()}
+                            >
+                              运行 PoC
+                            </Button>
+                          </Space>
+                        </div>
+
+                        {!hasBackendPoc && (
+                          <Alert
+                            type="info"
+                            showIcon
+                            message="当前检查项未配置自动化 PoC"
+                            description="可以先通过手动检查录入结论；后续在检查模板中为该检查项补充 poc_code 后即可启用自动化执行。"
+                          />
+                        )}
+
+                        {(pocTask || activeResult.last_poc_output || activeResult.evidence) && (
+                          <div className={styles.pocStatusGrid}>
+                            <div>
+                              <span>任务状态</span>
+                              <strong>{pocTask?.task_state || '已回填'}</strong>
+                            </div>
+                            <div>
+                              <span>退出码</span>
+                              <strong>{pocTask?.exit_code ?? String(activeEvidence.exitCode ?? '未记录')}</strong>
+                            </div>
+                            <div>
+                              <span>诊断码</span>
+                              <strong>{diagnosisCode}</strong>
+                            </div>
+                            <div>
+                              <span>诊断说明</span>
+                              <strong>{diagnosisMessage}</strong>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+
                       <div className={styles.statusBox}>
                         <Text style={{ color: '#6b7280', display: 'block', marginBottom: 16 }}>检查结论</Text>
                         <Radio.Group
@@ -749,7 +897,7 @@ export default function EvaluationWorkbench() {
                       </div>
 
                       {/* 新增：自动化实战取证日志 */}
-                      {(activeResult.raw_output || terminalOutput) && (
+                      {(activeResult.raw_output || activeResult.last_poc_output || terminalOutput) && (
                         <div style={{ marginTop: 24 }}>
                           <Text style={{ color: '#6b7280', display: 'block', marginBottom: 8 }}>🛡️ 自动化实战取证日志 (Evidence Logs)</Text>
                           <div style={{ 
@@ -767,7 +915,7 @@ export default function EvaluationWorkbench() {
                               fontFamily: '"Fira Code", monospace',
                               whiteSpace: 'pre-wrap'
                             }}>
-                              {activeResult.raw_output || terminalOutput}
+                              {activeResult.last_poc_output || activeResult.raw_output || terminalOutput}
                             </pre>
                           </div>
                           <Text type="secondary" style={{ fontSize: 12, marginTop: 8, display: 'block' }}>

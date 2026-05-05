@@ -81,6 +81,7 @@ export default function Login() {
           <Form.Item style={{ marginBottom: 0 }}>
             <Button
               type="primary" htmlType="submit" size="large" block
+              data-testid="login-submit"
               style={{ background: 'linear-gradient(135deg, #5b6ef5, #8b5cf6)', border: 'none', height: 48, fontSize: 15 }}
             >
               登录

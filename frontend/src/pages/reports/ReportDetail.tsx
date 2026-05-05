@@ -410,7 +410,7 @@ export default function ReportDetail() {
     }
 
     return (
-      <div className={styles.container}>
+      <div className={styles.container} data-testid="report-detail">
         <div className={styles.toolbar}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
             <Button icon={<ArrowLeftOutlined />} type="text" style={{ color: 'var(--text-secondary)' }} onClick={() => navigate('/reports')} />
@@ -537,6 +537,7 @@ export default function ReportDetail() {
                       size="small"
                       type={remediationTask ? 'default' : 'primary'}
                       onClick={() => remediationTask ? navigate(`/remediations/${remediationTask.id}`) : handleCreateRemediation(finding)}
+                      data-testid={remediationTask ? 'view-remediation-button' : 'create-remediation-button'}
                     >
                       {remediationTask ? '查看整改' : '转整改'}
                     </Button>

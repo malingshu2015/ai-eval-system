@@ -1,6 +1,7 @@
 """
 治理闭环端点：审计日志与整改任务
 """
+from datetime import datetime, timezone
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -8,6 +9,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.database import get_db
+from core.deps import RequireAuditorOrAbove, RequireWriter
 from model.governance import AuditEvent, PentestReport, RemediationTask
 from schema.governance import (
     AuditEventCreate,
@@ -22,16 +24,27 @@ from schema.governance import (
 router = APIRouter()
 
 
-@router.get("/audit-events", response_model=List[AuditEventResponse], response_model_by_alias=True)
+def _is_closed_status(status: object) -> bool:
+    """兼容 ORM 枚举与 Pydantic use_enum_values 后的字符串。"""
+    value = getattr(status, "value", status)
+    return value == "closed"
+
+
+def _ensure_closed_at(task: RemediationTask) -> None:
+    if _is_closed_status(task.status) and not task.closed_at:
+        task.closed_at = datetime.now(timezone.utc).isoformat()
+
+
+@router.get("/audit-events", response_model=List[AuditEventResponse], response_model_by_alias=True, dependencies=[RequireAuditorOrAbove])
 async def list_audit_events(db: AsyncSession = Depends(get_db)):
-    """查询审计事件，按创建时间倒序返回。"""
+    """查询审计事件（需要：auditor 及以上角色）"""
     result = await db.execute(select(AuditEvent).order_by(AuditEvent.created_at.desc()).limit(200))
     return result.scalars().all()
 
 
-@router.post("/audit-events", response_model=AuditEventResponse, response_model_by_alias=True)
+@router.post("/audit-events", response_model=AuditEventResponse, response_model_by_alias=True, dependencies=[RequireWriter])
 async def create_audit_event(event_in: AuditEventCreate, db: AsyncSession = Depends(get_db)):
-    """写入审计事件；相同 id 的事件按幂等处理。"""
+    """写入审计事件（需要：eval_engineer 及以上角色）"""
     existing = await db.get(AuditEvent, event_in.id)
     if existing:
         return existing
@@ -43,12 +56,12 @@ async def create_audit_event(event_in: AuditEventCreate, db: AsyncSession = Depe
     return event
 
 
-@router.get("/remediations", response_model=List[RemediationTaskResponse], response_model_by_alias=True)
+@router.get("/remediations", response_model=List[RemediationTaskResponse], response_model_by_alias=True, dependencies=[RequireAuditorOrAbove])
 async def list_remediations(
     finding_id: Optional[str] = None,
     db: AsyncSession = Depends(get_db),
 ):
-    """查询整改任务，可按风险发现 ID 过滤。"""
+    """查询整改任务（需要：auditor 及以上角色）"""
     stmt = select(RemediationTask).order_by(RemediationTask.updated_at.desc())
     if finding_id:
         stmt = stmt.where(RemediationTask.finding_id == finding_id)
@@ -56,9 +69,9 @@ async def list_remediations(
     return result.scalars().all()
 
 
-@router.post("/remediations", response_model=RemediationTaskResponse, response_model_by_alias=True)
+@router.post("/remediations", response_model=RemediationTaskResponse, response_model_by_alias=True, dependencies=[RequireWriter])
 async def create_remediation(task_in: RemediationTaskCreate, db: AsyncSession = Depends(get_db)):
-    """创建整改任务；相同 id 或相同 finding_id 的任务按幂等处理。"""
+    """创建整改任务（需要：eval_engineer 及以上角色）"""
     existing = await db.get(RemediationTask, task_in.id)
     if existing:
         return existing
@@ -70,22 +83,23 @@ async def create_remediation(task_in: RemediationTaskCreate, db: AsyncSession = 
         return task
 
     task = RemediationTask(**task_in.model_dump(by_alias=False))
+    _ensure_closed_at(task)
     db.add(task)
     await db.commit()
     await db.refresh(task)
     return task
 
 
-@router.get("/pentest-reports", response_model=List[PentestReportResponse], response_model_by_alias=True)
+@router.get("/pentest-reports", response_model=List[PentestReportResponse], response_model_by_alias=True, dependencies=[RequireAuditorOrAbove])
 async def list_pentest_reports(db: AsyncSession = Depends(get_db)):
-    """查询渗透测试报告，包含结构化风险、证据和复核快照。"""
+    """查询渗透测试报告（需要：auditor 及以上角色）"""
     result = await db.execute(select(PentestReport).order_by(PentestReport.created_at.desc()).limit(100))
     return result.scalars().all()
 
 
-@router.post("/pentest-reports", response_model=PentestReportResponse, response_model_by_alias=True)
+@router.post("/pentest-reports", response_model=PentestReportResponse, response_model_by_alias=True, dependencies=[RequireWriter])
 async def upsert_pentest_report(report_in: PentestReportPayload, db: AsyncSession = Depends(get_db)):
-    """保存渗透测试报告；相同 id 时更新快照。"""
+    """保存渗透测试报告（需要：eval_engineer 及以上角色）"""
     report = await db.get(PentestReport, report_in.id)
     payload = report_in.model_dump(by_alias=False)
     if report:
@@ -100,31 +114,31 @@ async def upsert_pentest_report(report_in: PentestReportPayload, db: AsyncSessio
     return report
 
 
-@router.get("/pentest-reports/{report_id}", response_model=PentestReportResponse, response_model_by_alias=True)
+@router.get("/pentest-reports/{report_id}", response_model=PentestReportResponse, response_model_by_alias=True, dependencies=[RequireAuditorOrAbove])
 async def get_pentest_report(report_id: str, db: AsyncSession = Depends(get_db)):
-    """查询单个渗透测试报告。"""
+    """查询单个渗透测试报告（需要：auditor 及以上角色）"""
     report = await db.get(PentestReport, report_id)
     if not report:
         raise HTTPException(status_code=404, detail="报告不存在")
     return report
 
 
-@router.get("/remediations/{task_id}", response_model=RemediationTaskResponse, response_model_by_alias=True)
+@router.get("/remediations/{task_id}", response_model=RemediationTaskResponse, response_model_by_alias=True, dependencies=[RequireAuditorOrAbove])
 async def get_remediation(task_id: str, db: AsyncSession = Depends(get_db)):
-    """查询单个整改任务。"""
+    """查询单个整改任务（需要：auditor 及以上角色）"""
     task = await db.get(RemediationTask, task_id)
     if not task:
         raise HTTPException(status_code=404, detail="整改任务不存在")
     return task
 
 
-@router.patch("/remediations/{task_id}", response_model=RemediationTaskResponse, response_model_by_alias=True)
+@router.patch("/remediations/{task_id}", response_model=RemediationTaskResponse, response_model_by_alias=True, dependencies=[RequireWriter])
 async def update_remediation(
     task_id: str,
     task_in: RemediationTaskUpdate,
     db: AsyncSession = Depends(get_db),
 ):
-    """更新整改任务状态、责任人、方案和复测结论。"""
+    """更新整改任务（需要：eval_engineer 及以上角色）"""
     task = await db.get(RemediationTask, task_id)
     if not task:
         raise HTTPException(status_code=404, detail="整改任务不存在")
@@ -132,6 +146,7 @@ async def update_remediation(
     updates = task_in.model_dump(exclude_unset=True, by_alias=False)
     for key, value in updates.items():
         setattr(task, key, value)
+    _ensure_closed_at(task)
 
     await db.commit()
     await db.refresh(task)

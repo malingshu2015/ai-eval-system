@@ -1,4 +1,4 @@
-"""认证与用户管理端点"""
+"""认证与用户管理端点（Sprint 7.3：已接入接口级 RBAC 权限校验）"""
 import uuid
 from typing import List
 
@@ -7,6 +7,7 @@ from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.database import get_db
+from core.deps import RequireAdmin
 from core.security import create_access_token, hash_password, verify_password
 from model.user import User
 from schema.auth import LoginRequest, LoginResponse, UserCreate, UserResponse, UserUpdate
@@ -32,16 +33,16 @@ async def login(payload: LoginRequest, db: AsyncSession = Depends(get_db)):
     return LoginResponse(token=token, user=user)
 
 
-@router.get("/users", response_model=List[UserResponse], response_model_by_alias=True)
+@router.get("/users", response_model=List[UserResponse], response_model_by_alias=True, dependencies=[RequireAdmin])
 async def list_users(db: AsyncSession = Depends(get_db)):
-    """查询真实后端用户列表。"""
+    """查询用户列表（需要：super_admin）"""
     result = await db.execute(select(User).order_by(User.created_at.desc()))
     return result.scalars().all()
 
 
-@router.post("/users", response_model=UserResponse, response_model_by_alias=True)
+@router.post("/users", response_model=UserResponse, response_model_by_alias=True, dependencies=[RequireAdmin])
 async def create_user(payload: UserCreate, db: AsyncSession = Depends(get_db)):
-    """创建真实后端登录用户。"""
+    """创建用户（需要：super_admin）"""
     existing_result = await db.execute(
         select(User).where(or_(User.username == payload.username, User.email == payload.email))
     )
@@ -62,9 +63,9 @@ async def create_user(payload: UserCreate, db: AsyncSession = Depends(get_db)):
     return user
 
 
-@router.patch("/users/{user_id}", response_model=UserResponse, response_model_by_alias=True)
+@router.patch("/users/{user_id}", response_model=UserResponse, response_model_by_alias=True, dependencies=[RequireAdmin])
 async def update_user(user_id: uuid.UUID, payload: UserUpdate, db: AsyncSession = Depends(get_db)):
-    """更新真实后端用户基础信息、角色和启停状态。"""
+    """更新用户信息、角色和启停状态（需要：super_admin）"""
     user = await db.get(User, user_id)
     if not user:
         raise HTTPException(status_code=404, detail="用户不存在")

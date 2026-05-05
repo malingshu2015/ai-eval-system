@@ -82,6 +82,8 @@ class CheckResult(Base):
     raw_output: Mapped[Optional[str]] = mapped_column(Text)
     # 结构化证据（JSON：截图路径、输出片段、链接等）
     evidence: Mapped[Optional[str]] = mapped_column(Text)
+    # 最近一次 PoC 执行的输出
+    last_poc_output: Mapped[Optional[str]] = mapped_column(Text)
     # 工程师备注
     notes: Mapped[Optional[str]] = mapped_column(Text)
     checked_by_id: Mapped[Optional[uuid.UUID]] = mapped_column(

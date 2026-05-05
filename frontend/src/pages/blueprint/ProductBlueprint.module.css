@@ -71,6 +71,31 @@
   line-height: 1.7;
 }
 
+.progressGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+}
+
+.progressCard {
+  padding: 16px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+}
+
+.progressCard > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.progressCard strong {
+  color: #0f172a;
+}
+
 .section {
   padding: 22px;
   background: #ffffff;
@@ -230,6 +255,70 @@
   line-height: 1.7;
 }
 
+.trackList {
+  display: grid;
+  gap: 10px;
+}
+
+.trackItem {
+  padding: 14px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+}
+
+.trackItem > div,
+.openItem > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+}
+
+.trackItem strong,
+.openItem strong {
+  color: #0f172a;
+}
+
+.trackItem p,
+.openItem p {
+  margin: 8px 0;
+  color: #64748b;
+  font-size: 13px;
+  line-height: 1.7;
+}
+
+.trackItem code {
+  display: inline-block;
+  padding: 3px 6px;
+  color: #2563eb;
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  border-radius: 6px;
+  font-size: 12px;
+}
+
+.openGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 12px;
+}
+
+.openItem {
+  padding: 16px;
+  background: #fff7ed;
+  border: 1px solid #fed7aa;
+  border-radius: 10px;
+}
+
+.openItem > span {
+  display: inline-block;
+  margin-top: 8px;
+  color: #c2410c;
+  font-size: 12px;
+  font-weight: 700;
+}
+
 .nextGrid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
@@ -263,6 +352,7 @@
 
 @media (max-width: 900px) {
   .hero,
+  .progressGrid,
   .nextGrid {
     grid-template-columns: 1fr;
   }

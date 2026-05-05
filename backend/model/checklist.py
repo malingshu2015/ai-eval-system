@@ -88,6 +88,8 @@ class CheckItem(Base):
     references: Mapped[Optional[str]] = mapped_column(Text)         # JSON 数组，参考链接
     # 关联的工具 ID 列表（JSON 数组）
     tool_ids: Mapped[Optional[str]] = mapped_column(Text)
+    # 自动化验证脚本 (Python 代码)
+    poc_code: Mapped[Optional[str]] = mapped_column(Text)
     sort_order: Mapped[int] = mapped_column(Integer, default=0)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
 

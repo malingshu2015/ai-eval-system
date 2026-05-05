@@ -17,7 +17,25 @@ export interface CheckResult {
   notes?: string
   evidence?: string
   raw_output?: string
+  last_poc_output?: string
   actual_severity?: string
+  confidence_score?: number
+  confidence_level?: 'high' | 'medium' | 'low' | 'unknown'
+}
+
+export interface PocTaskStatus {
+  task_id: string
+  task_state: string
+  session_id: string
+  check_item_id: string
+  result_status: CheckResultStatus
+  last_poc_output?: string
+  confidence_score?: number
+  confidence_level?: 'high' | 'medium' | 'low' | 'unknown'
+  diagnosis_code?: string
+  diagnosis_message?: string
+  exit_code?: number
+  message?: string
 }
 
 export interface EvaluationSession {
@@ -52,6 +70,28 @@ export const evaluationApi = {
     data: Partial<CheckResult>
   ): Promise<{ message: string }> => {
     return apiClient.patch(`/evaluations/${sessionId}/results/${checkItemId}`, data)
+  },
+
+  runPoc: (
+    sessionId: string,
+    checkItemId: string
+  ): Promise<{ status: string; task_id?: string; message: string }> => {
+    return apiClient.post(`/evaluations/${sessionId}/results/${checkItemId}/run-poc`)
+  },
+
+  getPocTaskStatus: (
+    sessionId: string,
+    checkItemId: string,
+    taskId: string
+  ): Promise<PocTaskStatus> => {
+    return apiClient.get(`/evaluations/${sessionId}/results/${checkItemId}/poc-task/${taskId}`)
+  },
+
+  exportReportHtml: (sessionId: string): Promise<Blob> => {
+    return apiClient.get(`/report/${sessionId}/report`, {
+      responseType: 'blob',
+      headers: { Accept: 'text/html' },
+    })
   },
 
   updateSession: (id: string, data: Partial<EvaluationSession>): Promise<EvaluationSession> => {

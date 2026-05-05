@@ -11,12 +11,31 @@ from typing import Dict, Any
 from dotenv import load_dotenv
 load_dotenv(Path(__file__).resolve().parents[3] / ".env")
 
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Depends, status, HTTPException
+from jose import JWTError, jwt
 import structlog
+
+from core.config import settings
+from core.database import get_db
+from model.user import User, UserRole
 
 logger = structlog.get_logger(__name__)
 
 router = APIRouter()
+
+async def get_ws_user(token: str) -> User:
+    """WS 专用认证函数：目前假设 token 在握手后作为第一条消息或 Query 传递
+    此处为 Sprint 7.3 提供一个基础校验占位。
+    """
+    try:
+        payload = jwt.decode(token, settings.JWT_SECRET_KEY, algorithms=[settings.JWT_ALGORITHM])
+        # 此处简化：如果解析成功且角色正确即允许
+        role = payload.get("role")
+        if role not in [UserRole.SUPER_ADMIN.value, UserRole.EVAL_ENGINEER.value]:
+             return None
+        return payload
+    except:
+        return None
 
 # 模拟不同工具的安全执行沙箱 (Mock)
 # 实际生产环境中应通过 Celery 拉起 Docker 容器并捕获输出
