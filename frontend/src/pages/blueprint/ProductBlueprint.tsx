@@ -87,7 +87,8 @@ const progressSummary = [
   { label: 'Sprint 6 后端桥接', value: 100, status: '已完成', color: '#16a34a' },
   { label: 'Sprint 7 生产化底座', value: 88, status: '权限矩阵已验收', color: '#7c3aed' },
   { label: 'Sprint 8 自动化执行', value: 100, status: '页面闭环 E2E 已覆盖', color: '#0891b2' },
-  { label: 'Sprint 9 PoC 覆盖扩展', value: 95, status: '15 项 PoC 已覆盖', color: '#ea580c' },
+  { label: 'Sprint 9 PoC 覆盖扩展', value: 100, status: '覆盖可视化已完成', color: '#16a34a' },
+  { label: 'Sprint 10 真实运行体验', value: 100, status: '报告可信度摘要已完成', color: '#16a34a' },
 ]
 
 const completedTracks = [
@@ -168,8 +169,33 @@ const completedTracks = [
   },
   {
     title: 'API / Web 只读 PoC 再扩展',
-    detail: '已新增 CSRF Cookie 属性、废弃 API 版本暴露、JWT alg=none 拒绝检查 3 个只读 PoC，当前 Web/API 覆盖提升到 9 项，Sprint 9 总覆盖达到 15 项。',
+    detail: '已新增 CSRF Cookie 属性、废弃 API 版本暴露、JWT alg=none 拒绝检查 3 个只读 PoC，当前 Web/API 覆盖提升到 9 项，Sprint 9 总覆盖达到 15 项，并已同步到当前开发库。',
     commit: 'Sprint 9.6 · 待提交',
+  },
+  {
+    title: 'PoC 覆盖可视化',
+    detail: '已在检查模板库展示自动 PoC 覆盖率、自动/手工检查数量，并在评估工作台左侧目录和检查项标题中标识自动 PoC 能力。',
+    commit: 'Sprint 9.7 · 待提交',
+  },
+  {
+    title: '任务执行总览',
+    detail: '已在评估工作台顶部新增执行总览，展示自动 PoC 已运行/可运行、通过/失败、待处理和高可信证据数量，帮助用户快速判断任务当前状态。',
+    commit: 'Sprint 10.1 · 待提交',
+  },
+  {
+    title: '结果可信度面板',
+    detail: '已在结果判读页新增可信度面板，按自动 PoC、工具日志、人工录入、待执行 PoC 或待手工检查区分证据来源，并展示置信分和诊断码。',
+    commit: 'Sprint 10.2 · 待提交',
+  },
+  {
+    title: '评估工作台一键转整改',
+    detail: '已在结果判读页新增转整改入口，失败、部分通过、严重或高危检查项可直接生成整改任务；已存在整改项时可直接跳转查看。',
+    commit: 'Sprint 10.3 · 待提交',
+  },
+  {
+    title: '报告 PoC 覆盖与可信度摘要',
+    detail: '已在正式报告中新增自动化覆盖与证据可信度摘要，展示自动化来源占比、已验证证据占比、高可信证据数量和需要补充复测的人工/AI 推断项。',
+    commit: 'Sprint 10.4 · 待提交',
   },
 ]
 
@@ -202,7 +228,13 @@ const openTracks = [
     title: '自动化执行闭环',
     owner: '安全能力',
     status: '部分完成',
-    detail: 'PoC 沙箱、Celery 入口、任务状态查询、结果回填、置信度计算、报告证据引用、轻量运行隔离、失败诊断、前端执行入口、本地 Ollama 模型调用、报告导出鉴权修复、工作台 E2E、报告转整改 E2E 和本地一键验收入口已完成；当前已有 15 个检查项配置 PoC，下一步补 GraphQL、Webhook、对象级越权等需要更明确目标接口契约的探针。',
+    detail: 'PoC 沙箱、Celery 入口、任务状态查询、结果回填、置信度计算、报告证据引用、轻量运行隔离、失败诊断、前端执行入口、本地 Ollama 模型调用、报告导出鉴权修复、工作台 E2E、报告转整改 E2E、本地一键验收入口和覆盖可视化已完成；当前已有 15 个检查项配置 PoC 并同步到开发库。',
+  },
+  {
+    title: '运行体验与可信度表达',
+    owner: '产品 / 前端',
+    status: '当前范围完成',
+    detail: '任务执行总览、结果可信度面板、评估工作台一键转整改和报告可信度摘要已完成。',
   },
   {
     title: '迁移脚本与模型一致性',
@@ -234,12 +266,19 @@ const priorities = [
 ]
 
 const reportTemplates = [
-  { name: '大模型安全评估报告', fit: 'LLM / RAG / 模型 API', focus: '测试维度、攻击样例、模型响应、失败项' },
-  { name: 'AI Agent 安全评估报告', fit: '工具型 Agent / 工作流 Agent', focus: '工具权限、任务链路、危险动作、审计轨迹' },
-  { name: 'Web 渗透测试报告', fit: 'Web / API / 业务系统', focus: '目标资产、核心漏洞、复核结论、整改计划' },
-  { name: '基线合规检查报告', fit: '配置基线 / 制度项 / 合规检查', focus: '检查项、合规状态、责任人、整改期限' },
-  { name: '综合对比报告', fit: '多模型 / 多 Agent / 多轮扫描', focus: '评分趋势、风险分布、Top 问题、版本差异' },
+  { name: '大模型安全评估报告', fit: 'LLM / RAG / 模型 API', focus: '测试维度、攻击样例、模型响应、失败项', status: '已接入' },
+  { name: 'AI Agent 安全评估报告', fit: '工具型 Agent / 工作流 Agent', focus: '工具权限、任务链路、危险动作、审计轨迹', status: '已接入' },
+  { name: 'Web 渗透测试报告', fit: 'Web / API / 业务系统', focus: '目标资产、核心漏洞、复核结论、整改计划', status: '已接入' },
+  { name: '基线合规检查报告', fit: '配置基线 / 制度项 / 合规检查', focus: '检查项、合规状态、责任人、整改期限', status: '结构完成' },
+  { name: '综合对比报告', fit: '多模型 / 多 Agent / 多轮扫描', focus: '评分趋势、风险分布、Top 问题、版本差异', status: '结构完成' },
 ]
+
+const reportTemplateMaturity = {
+  completed: ['五类固定模板定义', '任务创建时自动推荐/手动覆盖', '报告详情结构化渲染', '原始输出进入附录', 'PoC 覆盖与证据可信度摘要'],
+  pending: ['模板后台可配置', '模板版本审批流', '每类模板独立数据生成器', 'PDF 版式精修', '多任务对比报告真实数据源'],
+  percent: 85,
+  status: '核心可用，产品化增强中',
+}
 
 export default function ProductBlueprint() {
   return (
@@ -379,16 +418,39 @@ export default function ProductBlueprint() {
                 <FileProtectOutlined />
                 <Title level={4}>报告模板体系</Title>
               </Space>
-              <Text>不同检测对象使用不同报告结构，统一外壳，分类正文。</Text>
+              <Text>核心模板已可用，但模板管理、版本审批和 PDF 精修仍属于后续产品化增强。</Text>
+            </div>
+            <div className={styles.templateMaturity}>
+              <div>
+                <span>成熟度</span>
+                <strong>{reportTemplateMaturity.percent}%</strong>
+              </div>
+              <div className={styles.templateMaturityBody}>
+                <Tag color="green">{reportTemplateMaturity.status}</Tag>
+                <Progress percent={reportTemplateMaturity.percent} size="small" strokeColor="#16a34a" />
+              </div>
             </div>
             <div className={styles.templateList}>
               {reportTemplates.map((template) => (
                 <div className={styles.templateItem} key={template.name}>
-                  <strong>{template.name}</strong>
+                  <div className={styles.templateItemHeader}>
+                    <strong>{template.name}</strong>
+                    <Tag color={template.status === '已接入' ? 'green' : 'blue'}>{template.status}</Tag>
+                  </div>
                   <span>{template.fit}</span>
                   <p>{template.focus}</p>
                 </div>
               ))}
+            </div>
+            <div className={styles.templateGapGrid}>
+              <div>
+                <strong>已完成</strong>
+                {reportTemplateMaturity.completed.map((item) => <span key={item}>{item}</span>)}
+              </div>
+              <div>
+                <strong>待增强</strong>
+                {reportTemplateMaturity.pending.map((item) => <span key={item}>{item}</span>)}
+              </div>
             </div>
           </section>
         </Col>

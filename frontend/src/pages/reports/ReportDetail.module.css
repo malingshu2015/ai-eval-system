@@ -231,6 +231,40 @@
   vertical-align: top;
 }
 
+.coverageGrid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.coverageGrid div {
+  padding: 14px 16px;
+  background: #f8fafc;
+  border: 1px solid var(--bg-border);
+  border-radius: 8px;
+}
+
+.coverageGrid span {
+  display: block;
+  color: var(--text-secondary);
+  font-size: 12px;
+  margin-bottom: 4px;
+}
+
+.coverageGrid strong {
+  display: block;
+  color: var(--text-primary);
+  font-size: 24px;
+  line-height: 1.2;
+}
+
+.coverageGrid p {
+  margin: 6px 0 0;
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
 .reportBody {
   padding: 8px 28px 28px;
 }
@@ -510,91 +544,150 @@
 }
 
 .findingCard {
-  display: grid;
-  grid-template-columns: 46px minmax(0, 1fr) 104px;
-  gap: 14px;
-  align-items: start;
-  padding: 16px;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  padding: 0;
   background: #fff;
   border: 1px solid var(--bg-border);
-  border-radius: 10px;
-  box-shadow: 0 6px 20px rgba(15, 23, 42, 0.04);
+  border-radius: 12px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.03);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  overflow: hidden;
+}
+
+.findingCard:hover {
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.06);
+  transform: translateY(-2px);
+  border-color: #bfdbfe;
+}
+
+.severityStrip {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 5px;
+}
+
+.findingHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 20px;
+  background: #fcfcfc;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.findingContent {
+  padding: 16px 20px;
+}
+
+.descriptionBox {
+  color: var(--text-secondary);
+  font-size: 13.5px;
+  line-height: 1.7;
+  display: -webkit-box;
+  overflow: hidden;
+  word-break: break-word;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+}
+
+.descriptionBox h3 {
+  font-size: 14.5px;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin: 16px 0 8px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.descriptionBox h3:first-child {
+  margin-top: 0;
+}
+
+.descriptionBox p {
+  margin-bottom: 12px;
+}
+
+.descriptionBox ul, .descriptionBox ol {
+  padding-left: 20px;
+  margin-bottom: 12px;
+}
+
+.descriptionBox li {
+  margin-bottom: 4px;
+}
+
+.descriptionBox code {
+  padding: 2px 5px;
+  background: #f1f5f9;
+  border-radius: 4px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: #e01e5a;
+}
+
+.expandedContent {
+  -webkit-line-clamp: unset !important;
+  display: block !important;
+}
+
+.remediationBox {
+  margin-top: 14px;
+  padding: 12px 16px;
+  background: #f8fafc;
+  border: 1px dashed #cbd5e1;
+  border-radius: 8px;
+  font-size: 13px;
 }
 
 .findingIndex {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 34px;
-  height: 34px;
-  color: #2563eb;
-  background: #eff6ff;
-  border: 1px solid #bfdbfe;
-  border-radius: 8px;
-  font-size: 12px;
-  font-weight: 800;
+  display: none;
 }
 
 .findingMain {
-  min-width: 0;
+  width: 100%;
 }
 
 .findingCardHeader {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  align-items: center;
-  margin-bottom: 6px;
-}
-
-.findingCardHeader strong {
-  min-width: 0;
-  color: var(--text-primary);
-  font-size: 15px;
-  line-height: 1.5;
-  word-break: break-word;
-}
-
-.findingCard p {
-  display: -webkit-box;
-  margin: 0;
-  overflow: hidden;
-  word-break: break-word;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
+  display: none;
 }
 
 .findingMeta {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
-  margin-top: 10px;
+  gap: 12px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid #f1f5f9;
 }
 
 .findingMeta span {
-  padding: 4px 8px;
-  color: #475569;
-  background: #f8fafc;
-  border: 1px solid #e2e8f0;
-  border-radius: 999px;
+  color: #64748b;
   font-size: 12px;
 }
 
+.findingActions {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 16px;
+  padding: 12px 20px;
+  background: #f8fafc;
+  border-top: 1px solid #f1f5f9;
+}
+
 .findingPriority {
-  padding: 6px 10px;
+  padding: 4px 10px;
   color: #1d4ed8;
   background: #eff6ff;
   border: 1px solid #bfdbfe;
   border-radius: 999px;
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 750;
   white-space: nowrap;
-}
-
-.findingActions {
-  display: grid;
-  justify-items: end;
-  gap: 8px;
 }
 
 .evidenceList {
@@ -732,5 +825,37 @@
 
   .kpiRow {
     grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media print {
+  :global(.ant-layout-sider),
+  :global(.ant-layout-header),
+  .toolbar {
+    display: none !important;
+  }
+
+  :global(.ant-layout),
+  :global(.ant-layout-content) {
+    background: #ffffff !important;
+  }
+
+  .container {
+    max-width: none;
+    margin: 0;
+  }
+
+  .reportDocument,
+  .standardReport,
+  .card,
+  .reportBlock,
+  .reviewBlock {
+    border-color: #d9e2ec;
+    box-shadow: none !important;
+  }
+
+  .standardReport,
+  .reportDocument {
+    border: none;
   }
 }

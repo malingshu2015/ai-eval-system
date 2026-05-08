@@ -106,24 +106,15 @@ async def run_subprocess_and_stream(cmd: str, websocket: WebSocket):
         stderr_buffer = ""
         
         async def read_stderr():
-            """后台任务：监听 stderr，提取结构化结果"""
+            """后台任务：读取全部 stderr 并缓存，等进程退出后统一解析"""
             nonlocal stderr_buffer
             while True:
-                chunk = await process.stderr.read(4096)
+                # NOTE: 增大读取块，减少分块次数，避免大 JSON 被截断
+                chunk = await process.stderr.read(65536)
                 if not chunk:
                     break
                 text = chunk.decode('utf-8', errors='replace')
                 stderr_buffer += text
-                
-                # 检测 __RESULT_JSON__ 标记
-                if '__RESULT_JSON__:' in stderr_buffer:
-                    try:
-                        json_part = stderr_buffer.split('__RESULT_JSON__:')[1].strip()
-                        result = json.loads(json_part)
-                        # 把结构化结果以独立消息类型发给前端
-                        await websocket.send_json({"type": "result", "data": result})
-                    except Exception as parse_err:
-                        logger.warning("result_parse_error", error=str(parse_err))
 
         # 启动 stderr 读取后台任务
         stderr_task = asyncio.create_task(read_stderr())
@@ -136,9 +127,31 @@ async def run_subprocess_and_stream(cmd: str, websocket: WebSocket):
             text = chunk.decode('utf-8', errors='replace')
             await websocket.send_json({"type": "stdout", "data": text})
 
-        # 等待 stderr 任务完成
+        # 等待 stderr 全部读完（进程已退出）再解析 JSON
         await stderr_task
         await process.wait()
+
+        # NOTE: 进程退出后，stderr 已完整接收，此时解析 JSON 才安全
+        if '__RESULT_JSON__:' in stderr_buffer:
+            try:
+                json_str = stderr_buffer.split('__RESULT_JSON__:')[1].strip()
+                # 只取第一个完整的 JSON 对象（防止多余内容污染）
+                brace_count = 0
+                end_idx = 0
+                for i, ch in enumerate(json_str):
+                    if ch == '{':
+                        brace_count += 1
+                    elif ch == '}':
+                        brace_count -= 1
+                        if brace_count == 0:
+                            end_idx = i + 1
+                            break
+                clean_json = json_str[:end_idx] if end_idx > 0 else json_str
+                result = json.loads(clean_json)
+                await websocket.send_json({"type": "result", "data": result})
+            except Exception as parse_err:
+                logger.warning("result_parse_error", error=str(parse_err))
+
         await websocket.send_json({"type": "exit", "code": process.returncode})
         
     except asyncio.CancelledError:
@@ -233,15 +246,21 @@ async def websocket_runner_endpoint(websocket: WebSocket):
                         )
                     elif tool_id == "pentest-hub":
                         # 处理 AI 黑客军团实战引擎
-                        engine_path = os.path.join(os.path.dirname(__file__), "../../../tools/pentest_engine.py")
+                        # NOTE: 使用 abspath 确保路径在 FastAPI 运行时上下文中也是正确的
+                        engine_path = os.path.abspath(
+                            os.path.join(os.path.dirname(__file__), "../../../tools/pentest_engine.py")
+                        )
                         agent_ids = data.get("agent_ids", "web-hunter")
+                        session_id = data.get("session_id", "")  # 捕获前端传来的 session_id
+                        _model = model_name or "legal2:latest"
                         
                         cmd = (
                             f"export PYTHONUNBUFFERED=1 && "
-                            f"python3 {engine_path} "
-                            f"--target {target} "
-                            f"--agents {agent_ids} "
-                            f"--model {model_name or 'qwen'}"
+                            f"python3 '{engine_path}' "
+                            f"--target '{target}' "
+                            f"--agents '{agent_ids}' "
+                            f"--model '{_model}' "
+                            f"--session_id '{session_id}'"
                         )
                     else:
                         # 其他工具保持原样

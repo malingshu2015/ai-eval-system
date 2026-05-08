@@ -22,6 +22,8 @@ import type { CheckResultStatus } from '@/types'
 import { evaluationApi, type CheckResult, type PocTaskStatus } from '@/api/evaluation'
 import { checklistApi } from '@/api/checklist'
 import { TOOL_REGISTRY as ALL_TOOLS } from './workbench-data'
+import { createRemediationTask, getRemediationTaskByFinding } from '@/utils/remediationTasks'
+import type { Finding, Severity } from '@/types/domain'
 
 const { Title, Text, Paragraph } = Typography
 const { TextArea } = Input
@@ -49,6 +51,55 @@ function parseEvidenceJson(evidence?: string) {
   } catch {
     return { raw: evidence }
   }
+}
+
+function getEvidenceProfile(result?: CheckResult | null, hasBackendPoc = false) {
+  const evidence = parseEvidenceJson(result?.evidence)
+  const hasPocOutput = Boolean(result?.last_poc_output)
+  const hasToolOutput = Boolean(result?.raw_output)
+  const hasManualNotes = Boolean(result?.notes?.trim())
+  const diagnosisCode = String(evidence.diagnosisCode || '未记录')
+
+  if (hasPocOutput) {
+    return {
+      source: '自动 PoC',
+      level: result?.confidence_level || 'unknown',
+      color: 'blue',
+      summary: diagnosisCode === 'SUCCESS' ? 'PoC 已执行并通过，证据链可直接支撑报告。' : 'PoC 已执行，需结合诊断信息判断是否为真实风险或环境问题。',
+    }
+  }
+
+  if (hasToolOutput) {
+    return {
+      source: '工具日志',
+      level: result?.confidence_level || 'medium',
+      color: 'cyan',
+      summary: '已有自动化工具输出，建议补充关键证据摘录后进入报告。',
+    }
+  }
+
+  if (hasManualNotes) {
+    return {
+      source: '人工录入',
+      level: result?.confidence_level || 'low',
+      color: 'orange',
+      summary: '当前结论主要依赖工程师备注，建议补充截图、日志或 PoC 输出。',
+    }
+  }
+
+  return {
+    source: hasBackendPoc ? '待执行 PoC' : '待手工检查',
+    level: 'unknown',
+    color: 'default',
+    summary: hasBackendPoc ? '该检查项支持自动 PoC，但尚未执行。' : '该检查项暂未配置自动 PoC，需要按 SOP 手工检查。',
+  }
+}
+
+function severityFromRisk(riskLevel?: string): Severity {
+  if (riskLevel === 'critical' || riskLevel === 'high' || riskLevel === 'medium' || riskLevel === 'low' || riskLevel === 'info') {
+    return riskLevel
+  }
+  return 'medium'
 }
 
 // ===== 工具卡片 =====
@@ -442,13 +493,68 @@ export default function EvaluationWorkbench() {
   const totalItems = allItems.length
   const completedItems = session?.results?.filter(r => r.status !== 'pending').length || 0
   const progressPercent = totalItems === 0 ? 0 : Math.round((completedItems / totalItems) * 100)
+  const pocEnabledItems = useMemo(() => allItems.filter((item) => Boolean(item.poc_code)).length, [allItems])
+  const pocCoveragePercent = totalItems === 0 ? 0 : Math.round((pocEnabledItems / totalItems) * 100)
+  const executionSummary = useMemo(() => {
+    const results = session?.results || []
+    const pocItemIds = new Set(allItems.filter((item) => item.poc_code).map((item) => item.id))
+    const pocResults = results.filter((result) => pocItemIds.has(result.check_item_id))
+    const pocExecuted = pocResults.filter((result) => Boolean(result.last_poc_output || result.raw_output)).length
+    const failed = results.filter((result) => result.status === 'fail').length
+    const passed = results.filter((result) => result.status === 'pass').length
+    const partial = results.filter((result) => result.status === 'partial').length
+    const highConfidence = results.filter((result) => result.confidence_level === 'high').length
+
+    return {
+      pocExecuted,
+      pocPending: Math.max(pocEnabledItems - pocExecuted, 0),
+      manualItems: Math.max(totalItems - pocEnabledItems, 0),
+      failed,
+      passed,
+      partial,
+      highConfidence,
+    }
+  }, [allItems, pocEnabledItems, session?.results, totalItems])
   const activeEvidence = useMemo(() => parseEvidenceJson(activeResult?.evidence), [activeResult?.evidence])
   const confidenceLevel = activeResult?.confidence_level || 'unknown'
   const confidenceScore = activeResult?.confidence_score ?? 0
   const diagnosisCode = String(pocTask?.diagnosis_code || activeEvidence.diagnosisCode || '未记录')
   const diagnosisMessage = String(pocTask?.diagnosis_message || activeEvidence.diagnosisMessage || '暂无诊断信息')
   const hasBackendPoc = Boolean(activeItem?.poc_code)
+  const evidenceProfile = useMemo(() => getEvidenceProfile(activeResult, hasBackendPoc), [activeResult, hasBackendPoc])
   const isPocRunning = runPocMutation.isPending || ['PENDING', 'STARTED', 'RETRY'].includes(pocTask?.task_state || '')
+  const activeFindingId = activeItem ? `eval-${sessionId}-${activeItem.id}` : ''
+  const existingRemediation = activeFindingId ? getRemediationTaskByFinding(activeFindingId) : undefined
+  const canCreateRemediation = Boolean(activeItem && activeResult && (
+    activeResult.status === 'fail' ||
+    activeResult.status === 'partial' ||
+    activeItem.risk_level === 'critical' ||
+    activeItem.risk_level === 'high'
+  ))
+
+  const handleCreateRemediation = () => {
+    if (!activeItem || !activeResult || !sessionId) return
+    const finding: Finding = {
+      id: activeFindingId,
+      taskId: sessionId,
+      title: `${activeItem.code} ${activeItem.name}`,
+      description: activeItem.description || activeResult.notes || '评估工作台生成的风险发现。',
+      severity: severityFromRisk(activeItem.risk_level),
+      category: template?.target_type || session?.target_type || 'evaluation',
+      source: activeResult.last_poc_output ? 'tool' : activeResult.notes ? 'manual' : 'ai_inferred',
+      evidenceStatus: activeResult.last_poc_output || activeResult.raw_output ? 'verified' : activeResult.notes ? 'partial' : 'missing',
+      reviewStatus: activeResult.status === 'fail' || activeResult.status === 'partial' ? 'verified' : 'pending',
+      remediationAdvice: activeItem.remediation || '补充整改方案后执行修复和复测。',
+      createdAt: new Date().toLocaleString(),
+    }
+    const task = createRemediationTask({
+      finding,
+      sourceReportId: sessionId,
+      sourceReportName: session?.name,
+    })
+    message.success(`已转入整改中心：${task.title}`)
+    navigate(`/remediations/${task.id}`)
+  }
 
   // ===== Hooks 必须放在所有早期 return 之前 =====
   const hasAutoTools = useMemo(() => {
@@ -549,6 +655,16 @@ export default function EvaluationWorkbench() {
         <div className={styles.sidebar}>
           <div style={{ padding: '16px 20px', borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
             <Input.Search placeholder="搜索编号或名称..." style={{ background: 'transparent' }} />
+            <div className={styles.coveragePanel}>
+              <div className={styles.coveragePanelHeader}>
+                <span>自动 PoC 覆盖</span>
+                <strong>{pocCoveragePercent}%</strong>
+              </div>
+              <Progress percent={pocCoveragePercent} size="small" showInfo={false} strokeColor="#2563eb" />
+              <Text style={{ color: '#64748b', fontSize: 12 }}>
+                {pocEnabledItems} 项自动 PoC · {Math.max(totalItems - pocEnabledItems, 0)} 项手工检查
+              </Text>
+            </div>
           </div>
           <div className={styles.catalog}>
             {template.categories.map((category) => (
@@ -576,6 +692,9 @@ export default function EvaluationWorkbench() {
                           <Text style={{ color: activeItemId === item.id ? '#2563eb' : '#0f172a', fontSize: 13 }} ellipsis>
                             {item.code} {item.name}
                           </Text>
+                          <div className={styles.itemBadges}>
+                            {item.poc_code ? <Tag color="blue">PoC</Tag> : <Tag>手工</Tag>}
+                          </div>
                         </div>
                       </div>
                     )
@@ -592,6 +711,28 @@ export default function EvaluationWorkbench() {
             <>
               {/* 工作区标题 */}
               <div className={styles.wsHeader}>
+                <div className={styles.executionOverview}>
+                  <div className={styles.executionMetric}>
+                    <span>自动 PoC</span>
+                    <strong>{executionSummary.pocExecuted}/{pocEnabledItems}</strong>
+                    <em>已运行 / 可运行</em>
+                  </div>
+                  <div className={styles.executionMetric}>
+                    <span>检查结论</span>
+                    <strong>{executionSummary.passed}/{executionSummary.failed}</strong>
+                    <em>通过 / 失败</em>
+                  </div>
+                  <div className={styles.executionMetric}>
+                    <span>待处理</span>
+                    <strong>{executionSummary.pocPending + executionSummary.manualItems}</strong>
+                    <em>待 PoC 或手工</em>
+                  </div>
+                  <div className={styles.executionMetric}>
+                    <span>高可信证据</span>
+                    <strong>{executionSummary.highConfidence}</strong>
+                    <em>可直接支撑报告</em>
+                  </div>
+                </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                   <div>
                     <Space size="middle" align="center">
@@ -604,6 +745,7 @@ export default function EvaluationWorkbench() {
                       <Tag color={RISK_COLORS[activeItem.risk_level]} style={{ border: 'none' }}>
                         {RISK_LABELS[activeItem.risk_level]}风险
                       </Tag>
+                      {hasBackendPoc ? <Tag color="blue">支持自动 PoC</Tag> : <Tag>手工检查</Tag>}
                     </Space>
                     <Paragraph style={{ color: '#6b7280', marginTop: 12, marginBottom: 0, maxWidth: 800 }}>
                       {activeItem.description}
@@ -791,6 +933,12 @@ export default function EvaluationWorkbench() {
                               {CONFIDENCE_LABELS[confidenceLevel]} · {confidenceScore}%
                             </Tag>
                             <Button
+                              onClick={() => existingRemediation ? navigate(`/remediations/${existingRemediation.id}`) : handleCreateRemediation()}
+                              disabled={!canCreateRemediation && !existingRemediation}
+                            >
+                              {existingRemediation ? '查看整改' : '转整改'}
+                            </Button>
+                            <Button
                               type="primary"
                               icon={<PlayCircleOutlined />}
                               loading={isPocRunning}
@@ -834,6 +982,38 @@ export default function EvaluationWorkbench() {
                       </div>
 
                       <div className={styles.statusBox}>
+                        <div className={styles.trustPanel}>
+                          <div className={styles.trustPanelHeader}>
+                            <div>
+                              <Text strong>结果可信度</Text>
+                              <Text type="secondary" style={{ display: 'block', fontSize: 12 }}>
+                                用于判断当前结论是否足以进入正式报告。
+                              </Text>
+                            </div>
+                            <Space>
+                              <Tag color={evidenceProfile.color}>{evidenceProfile.source}</Tag>
+                              <Tag color={CONFIDENCE_COLORS[evidenceProfile.level]}>
+                                {CONFIDENCE_LABELS[evidenceProfile.level]}
+                              </Tag>
+                            </Space>
+                          </div>
+                          <div className={styles.trustGrid}>
+                            <div>
+                              <span>证据来源</span>
+                              <strong>{evidenceProfile.source}</strong>
+                            </div>
+                            <div>
+                              <span>置信分</span>
+                              <strong>{confidenceScore}%</strong>
+                            </div>
+                            <div>
+                              <span>诊断码</span>
+                              <strong>{diagnosisCode}</strong>
+                            </div>
+                          </div>
+                          <Text style={{ color: '#475569', fontSize: 13 }}>{evidenceProfile.summary}</Text>
+                        </div>
+
                         <Text style={{ color: '#6b7280', display: 'block', marginBottom: 16 }}>检查结论</Text>
                         <Radio.Group
                           value={localStatus || activeResult.status}

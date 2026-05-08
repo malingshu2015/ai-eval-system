@@ -10,9 +10,11 @@ import {
   ArrowLeftOutlined, DownloadOutlined, PrinterOutlined,
   BugOutlined, CheckCircleOutlined, CloseCircleOutlined,
   SafetyCertificateOutlined, FileTextOutlined, WarningOutlined,
+  BulbOutlined,
 } from '@ant-design/icons'
 import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
+import ReactMarkdown from 'react-markdown'
 import type { RiskLevel, CheckResultStatus } from '@/types'
 import { fetchPentestReport, getPentestReport, getReportEvidence, getReportFindings, getReportReview } from '@/utils/pentestReports'
 import { createRemediationTask, getRemediationTaskByFinding } from '@/utils/remediationTasks'
@@ -269,6 +271,26 @@ function sourceLabel(source: Finding['source']) {
   return labels[source]
 }
 
+function buildEvidenceCoverage(findings: Finding[], evidence: ReturnType<typeof getReportEvidence>) {
+  const totalFindings = findings.length
+  const toolFindings = findings.filter((finding) => finding.source === 'tool').length
+  const manualFindings = findings.filter((finding) => finding.source === 'manual').length
+  const aiFindings = findings.filter((finding) => finding.source === 'ai_inferred').length
+  const verifiedFindings = findings.filter((finding) => finding.evidenceStatus === 'verified').length
+  const highConfidenceEvidence = evidence.filter((item) => item.confidence === 'high').length
+
+  return {
+    totalFindings,
+    toolFindings,
+    manualFindings,
+    aiFindings,
+    verifiedFindings,
+    highConfidenceEvidence,
+    automationPercent: totalFindings === 0 ? 0 : Math.round((toolFindings / totalFindings) * 100),
+    verifiedPercent: totalFindings === 0 ? 0 : Math.round((verifiedFindings / totalFindings) * 100),
+  }
+}
+
 function compactWhitespace(text: string) {
   return text.replace(/\s+/g, ' ').trim()
 }
@@ -315,7 +337,8 @@ function extractFindingTitle(finding: Finding, index: number) {
 }
 
 function isNoisyReportBlob(text: string) {
-  return text.length > 220 || /实战侦察分析报告|扫描摘要|目标IP|总端口|Nmap|bash|curl|nslookup|nmap\s/i.test(text)
+  // 放宽限制：允许更长的描述性文本，且不再因为包含工具名称就将其视为杂音（AI 分析通常包含这些）
+  return text.length > 1000 || /实战侦察分析报告|扫描摘要|目标IP|总端口/i.test(text)
 }
 
 function fallbackFindingSummary(title: string) {
@@ -340,7 +363,8 @@ function extractFindingSummary(finding: Finding) {
     .map((text) => text.replace(/^目标\s*[:：].*?(?=(风险|发现|端口|服务|管理|认证|权限|HTTP|NFS|SSH))/i, ''))
     .find((text) => text.length >= 12 && !isNoisyReportBlob(text))
 
-  return truncateText(summary || fallbackFindingSummary(title), 128)
+  // 将摘要长度限制放宽到 200，以便显示更多详情
+  return truncateText(summary || fallbackFindingSummary(title), 200)
 }
 
 function findingPriorityLabel(severity: Severity, index: number) {
@@ -356,10 +380,33 @@ function findingActionText(finding: Finding, index: number) {
   return '记录基线，随下次扫描复核'
 }
 
+function cleanAIText(text: string) {
+  if (!text) return ''
+  // 移除完整的 <think> 标签及其内容，以及被截断的 <think> 内容
+  const cleaned = text.replace(/<think>[\s\S]*?(?:<\/think>|$)/g, '').trim()
+  return cleaned || '由于生成中断或数据异常，未提取到结构化描述内容。'
+}
+
 export default function ReportDetail() {
   const navigate = useNavigate()
   const { id } = useParams()
   const [pentestReport, setPentestReport] = useState(() => id ? getPentestReport(id) : undefined)
+  const [expandedIds, setExpandedIds] = useState<string[]>([])
+
+  const handlePrint = () => {
+    window.print()
+  }
+
+  const handleExportPdf = () => {
+    message.info('请在打印窗口中选择“另存为 PDF”完成导出')
+    window.setTimeout(() => window.print(), 120)
+  }
+
+  const toggleExpand = (id: string) => {
+    setExpandedIds(prev =>
+      prev.includes(id) ? prev.filter(item => item !== id) : [...prev, id]
+    )
+  }
   const mockPresentation = getMockReportPresentation(id)
   const mockReportTemplate = resolveReportTemplate(mockPresentation.targetType, mockPresentation.reportTemplate)
   const { stats, findings, passList } = MOCK_REPORT
@@ -384,6 +431,7 @@ export default function ReportDetail() {
     const riskScore = Math.min(100, pentestReport.critical * 30 + pentestReport.high * 15 + pentestReport.medium * 6)
     const structuredFindings = getReportFindings(pentestReport)
     const structuredEvidence = getReportEvidence(pentestReport)
+    const evidenceCoverage = buildEvidenceCoverage(structuredFindings, structuredEvidence)
     const structuredReview = getReportReview(pentestReport)
     const sortedFindings = [...structuredFindings].sort((a, b) => {
       const weight: Record<Severity, number> = { critical: 5, high: 4, medium: 3, low: 2, info: 1 }
@@ -420,8 +468,8 @@ export default function ReportDetail() {
             </div>
           </div>
           <Space>
-            <Button icon={<PrinterOutlined />} style={{ color: 'var(--text-secondary)' }}>打印</Button>
-            <Button icon={<DownloadOutlined />} type="primary" style={{ background: 'var(--color-primary)' }}>
+            <Button icon={<PrinterOutlined />} style={{ color: 'var(--text-secondary)' }} onClick={handlePrint}>打印</Button>
+            <Button icon={<DownloadOutlined />} type="primary" style={{ background: 'var(--color-primary)' }} onClick={handleExportPdf}>
               导出 PDF
             </Button>
           </Space>
@@ -474,6 +522,32 @@ export default function ReportDetail() {
           </section>
 
           <section className={styles.reportBlock}>
+            <div className={styles.blockTitle}>自动化覆盖与证据可信度</div>
+            <div className={styles.coverageGrid}>
+              <div>
+                <span>自动化来源占比</span>
+                <strong>{evidenceCoverage.automationPercent}%</strong>
+                <p>{evidenceCoverage.toolFindings} / {evidenceCoverage.totalFindings} 项发现来自工具或 PoC 输出</p>
+              </div>
+              <div>
+                <span>已验证证据占比</span>
+                <strong>{evidenceCoverage.verifiedPercent}%</strong>
+                <p>{evidenceCoverage.verifiedFindings} 项发现已有可复核证据</p>
+              </div>
+              <div>
+                <span>高可信证据</span>
+                <strong>{evidenceCoverage.highConfidenceEvidence}</strong>
+                <p>高可信证据可直接支撑报告结论</p>
+              </div>
+              <div>
+                <span>人工 / AI 推断</span>
+                <strong>{evidenceCoverage.manualFindings + evidenceCoverage.aiFindings}</strong>
+                <p>建议在整改前补充复测证据</p>
+              </div>
+            </div>
+          </section>
+
+          <section className={styles.reportBlock}>
             <div className={styles.blockTitle}>报告模板结构</div>
             <div className={styles.templateOverview}>
               <div className={styles.templateSummary}>
@@ -515,35 +589,71 @@ export default function ReportDetail() {
           <section className={styles.reportBlock}>
             <div className={styles.blockTitle}>核心发现</div>
             <div className={styles.findingCards}>
-              {presentableFindings.map(({ finding, title, summary, priority, action, evidenceCount, remediationTask }, index) => (
-                <div className={styles.findingCard} key={finding.id}>
-                  <div className={styles.findingIndex}>{String(index + 1).padStart(2, '0')}</div>
-                  <div className={styles.findingMain}>
-                    <div className={styles.findingCardHeader}>
-                      <strong>{title}</strong>
-                      <Tag color={pentestSeverityColor(finding.severity)}>{pentestSeverityLabel(finding.severity)}</Tag>
+              {presentableFindings.map(({ finding, title, summary, priority, action, evidenceCount, remediationTask }, index) => {
+                const isExpanded = expandedIds.includes(finding.id)
+                const fullDesc = cleanAIText(finding.description || summary)
+                const hasMore = fullDesc.length > 180
+
+                return (
+                  <div className={styles.findingCard} key={finding.id}>
+                    <div className={styles.severityStrip} style={{ background: pentestSeverityColor(finding.severity) }} />
+                    
+                    <div className={styles.findingHeader}>
+                      <Space>
+                        <Text strong style={{ fontSize: 16 }}>{title}</Text>
+                        <Tag color={pentestSeverityColor(finding.severity)}>{pentestSeverityLabel(finding.severity)}</Tag>
+                      </Space>
+                      <Text type="secondary" style={{ fontSize: 12 }}>#{String(index + 1).padStart(2, '0')}</Text>
                     </div>
-                    <p>{summary}</p>
-                    <div className={styles.findingMeta}>
-                      <span>来源：{sourceLabel(finding.source)}</span>
-                      <span>证据：{evidenceStatusLabel(finding.evidenceStatus)} · {evidenceCount} 条</span>
-                      <span>复核：{finding.reviewStatus === 'verified' ? '已确认' : finding.reviewStatus === 'rejected' ? '已驳回' : '待确认'}</span>
-                      <span>建议：{action}</span>
+
+                    <div className={styles.findingContent}>
+                      <div className={`${styles.descriptionBox} ${isExpanded ? styles.expandedContent : ''}`}>
+                        <ReactMarkdown>{fullDesc}</ReactMarkdown>
+                      </div>
+                      
+                      {hasMore && (
+                        <Button 
+                          type="link" 
+                          size="small" 
+                          onClick={() => toggleExpand(finding.id)}
+                          style={{ padding: '8px 0', height: 'auto' }}
+                        >
+                          {isExpanded ? '收起详情' : '展开阅读完整专家分析...'}
+                        </Button>
+                      )}
+
+                      <div className={styles.remediationBox}>
+                        <Space align="start">
+                          <BulbOutlined style={{ color: 'var(--color-primary)', marginTop: 4 }} />
+                          <div>
+                            <Text strong style={{ display: 'block', marginBottom: 4 }}>处置建议</Text>
+                            <Text type="secondary">{action}</Text>
+                          </div>
+                        </Space>
+                      </div>
+
+                      <div className={styles.findingMeta}>
+                        <Space split={<Divider type="vertical" />} wrap>
+                          <span>来源：{sourceLabel(finding.source)}</span>
+                          <span>证据：{evidenceStatusLabel(finding.evidenceStatus)} · {evidenceCount} 条</span>
+                          <span>复核：{finding.reviewStatus === 'verified' ? '已确认' : '待确认'}</span>
+                        </Space>
+                      </div>
+                    </div>
+
+                    <div className={styles.findingActions}>
+                      <div className={styles.findingPriority}>{remediationTask ? '已转整改' : priority}</div>
+                      <Button
+                        size="small"
+                        type={remediationTask ? 'default' : 'primary'}
+                        onClick={() => remediationTask ? navigate(`/remediations/${remediationTask.id}`) : handleCreateRemediation(finding)}
+                      >
+                        {remediationTask ? '查看整改' : '转入整改流程'}
+                      </Button>
                     </div>
                   </div>
-                  <div className={styles.findingActions}>
-                    <div className={styles.findingPriority}>{remediationTask ? '已转整改' : priority}</div>
-                    <Button
-                      size="small"
-                      type={remediationTask ? 'default' : 'primary'}
-                      onClick={() => remediationTask ? navigate(`/remediations/${remediationTask.id}`) : handleCreateRemediation(finding)}
-                      data-testid={remediationTask ? 'view-remediation-button' : 'create-remediation-button'}
-                    >
-                      {remediationTask ? '查看整改' : '转整改'}
-                    </Button>
-                  </div>
-                </div>
-              ))}
+                )
+              })}
             </div>
           </section>
 
@@ -662,8 +772,8 @@ export default function ReportDetail() {
           </div>
         </div>
         <Space>
-          <Button icon={<PrinterOutlined />} style={{ color: 'var(--text-secondary)' }}>打印</Button>
-          <Button icon={<DownloadOutlined />} type="primary" style={{ background: 'var(--color-primary)' }}>
+          <Button icon={<PrinterOutlined />} style={{ color: 'var(--text-secondary)' }} onClick={handlePrint}>打印</Button>
+          <Button icon={<DownloadOutlined />} type="primary" style={{ background: 'var(--color-primary)' }} onClick={handleExportPdf}>
             导出 PDF
           </Button>
         </Space>
