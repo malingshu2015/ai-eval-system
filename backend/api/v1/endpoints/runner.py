@@ -4,6 +4,8 @@
 import asyncio
 import json
 import os
+import signal
+import shlex
 from pathlib import Path
 from typing import Dict, Any
 
@@ -85,7 +87,7 @@ TOOL_REAL_COMMANDS = {
     "pyrit": "docker run --rm -e OPENAI_API_KEY=$OPENAI_API_KEY ai-eval-garak:latest bash -c \"echo '[INFO] 正在调用 PyRIT 核心组件...'; garak --model_type rest --model_name {target_url} --probes jailbreak.Dan\""
 }
 
-async def run_subprocess_and_stream(cmd: str, websocket: WebSocket):
+async def run_subprocess_and_stream(cmd: str, websocket: WebSocket, task_state: Dict[str, Any]):
     """创建子进程并通过 WebSocket 流式返回输出
     
     关键设计：
@@ -102,6 +104,7 @@ async def run_subprocess_and_stream(cmd: str, websocket: WebSocket):
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE  # 关键：分离 stderr，不再合并到 stdout
         )
+        task_state["process"] = process
 
         stderr_buffer = ""
         
@@ -135,22 +138,14 @@ async def run_subprocess_and_stream(cmd: str, websocket: WebSocket):
         if '__RESULT_JSON__:' in stderr_buffer:
             try:
                 json_str = stderr_buffer.split('__RESULT_JSON__:')[1].strip()
-                # 只取第一个完整的 JSON 对象（防止多余内容污染）
-                brace_count = 0
-                end_idx = 0
-                for i, ch in enumerate(json_str):
-                    if ch == '{':
-                        brace_count += 1
-                    elif ch == '}':
-                        brace_count -= 1
-                        if brace_count == 0:
-                            end_idx = i + 1
-                            break
-                clean_json = json_str[:end_idx] if end_idx > 0 else json_str
-                result = json.loads(clean_json)
+                result, _ = json.JSONDecoder().raw_decode(json_str)
                 await websocket.send_json({"type": "result", "data": result})
             except Exception as parse_err:
                 logger.warning("result_parse_error", error=str(parse_err))
+                await websocket.send_json({
+                    "type": "error",
+                    "data": "扫描结果解析失败：报告内容过长或格式异常，请重试或减少参与 Agent。"
+                })
 
         await websocket.send_json({"type": "exit", "code": process.returncode})
         
@@ -167,6 +162,8 @@ async def run_subprocess_and_stream(cmd: str, websocket: WebSocket):
         if websocket.client_state.name == "CONNECTED":
             await websocket.send_json({"type": "error", "data": f"执行异常: {str(e)}"})
     finally:
+        task_state["process"] = None
+        task_state["paused"] = False
         if process and process.returncode is None:
             try:
                 process.terminate()
@@ -181,6 +178,7 @@ async def websocket_runner_endpoint(websocket: WebSocket):
     logger.info("runner_ws_connected")
     
     current_task = None
+    task_state: Dict[str, Any] = {"process": None, "paused": False}
     
     try:
         while True:
@@ -253,14 +251,16 @@ async def websocket_runner_endpoint(websocket: WebSocket):
                         agent_ids = data.get("agent_ids", "web-hunter")
                         session_id = data.get("session_id", "")  # 捕获前端传来的 session_id
                         _model = model_name or "legal2:latest"
+                        resolved_ip = (data.get("resolved_ip") or "").strip()
                         
                         cmd = (
                             f"export PYTHONUNBUFFERED=1 && "
-                            f"python3 '{engine_path}' "
-                            f"--target '{target}' "
-                            f"--agents '{agent_ids}' "
-                            f"--model '{_model}' "
-                            f"--session_id '{session_id}'"
+                            f"python3 {shlex.quote(engine_path)} "
+                            f"--target {shlex.quote(target)} "
+                            f"--agents {shlex.quote(agent_ids)} "
+                            f"--model {shlex.quote(_model)} "
+                            f"--session_id {shlex.quote(session_id)} "
+                            f"--resolved_ip {shlex.quote(resolved_ip)}"
                         )
                     else:
                         # 其他工具保持原样
@@ -278,12 +278,32 @@ async def websocket_runner_endpoint(websocket: WebSocket):
                     await websocket.send_json({"type": "system", "data": f"[*] 启动实战评估: {tool_id} (目标: {target})..."})
                     
                     # 异步启动任务
-                    current_task = asyncio.create_task(run_subprocess_and_stream(cmd, websocket))
+                    task_state["paused"] = False
+                    current_task = asyncio.create_task(run_subprocess_and_stream(cmd, websocket, task_state))
                 
                 elif action == "stop":
                     if current_task:
                         current_task.cancel()
+                        task_state["paused"] = False
                         await websocket.send_json({"type": "system", "data": "[*] 已手动停止评估任务。"})
+
+                elif action == "pause":
+                    process = task_state.get("process")
+                    if process and process.returncode is None and not task_state.get("paused"):
+                        process.send_signal(signal.SIGSTOP)
+                        task_state["paused"] = True
+                        await websocket.send_json({"type": "system", "data": "[*] 已暂停当前评估任务。"})
+                    else:
+                        await websocket.send_json({"type": "system", "data": "[!] 当前没有可暂停的运行任务。"})
+
+                elif action == "resume":
+                    process = task_state.get("process")
+                    if process and process.returncode is None and task_state.get("paused"):
+                        process.send_signal(signal.SIGCONT)
+                        task_state["paused"] = False
+                        await websocket.send_json({"type": "system", "data": "[*] 已继续当前评估任务。"})
+                    else:
+                        await websocket.send_json({"type": "system", "data": "[!] 当前没有已暂停的任务。"})
 
             except asyncio.TimeoutError:
                 # 发送心跳包保持连接

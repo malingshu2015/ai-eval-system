@@ -10,17 +10,18 @@ import {
   ArrowLeftOutlined, DownloadOutlined, PrinterOutlined,
   BugOutlined, CheckCircleOutlined, CloseCircleOutlined,
   SafetyCertificateOutlined, FileTextOutlined, WarningOutlined,
-  BulbOutlined,
+  BulbOutlined, ProjectOutlined, RocketOutlined,
 } from '@ant-design/icons'
 import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import ReactMarkdown from 'react-markdown'
 import type { RiskLevel, CheckResultStatus } from '@/types'
 import { fetchPentestReport, getPentestReport, getReportEvidence, getReportFindings, getReportReview } from '@/utils/pentestReports'
-import { createRemediationTask, getRemediationTaskByFinding } from '@/utils/remediationTasks'
-import type { EvidenceStatus, Finding, Severity } from '@/types/domain'
+import { governanceApi } from '@/api/governance'
+import type { EvidenceStatus, Finding, Severity, RemediationPlan } from '@/types/domain'
 import { resolveReportTemplate, type ReportTemplateId } from '@/utils/reportTemplates'
 import styles from './ReportDetail.module.css'
+import { useAuthStore } from '@/stores/authStore'
 
 const { Title, Text, Paragraph } = Typography
 
@@ -391,7 +392,10 @@ export default function ReportDetail() {
   const navigate = useNavigate()
   const { id } = useParams()
   const [pentestReport, setPentestReport] = useState(() => id ? getPentestReport(id) : undefined)
+  const [associatedPlan, setAssociatedPlan] = useState<RemediationPlan | null>(null)
   const [expandedIds, setExpandedIds] = useState<string[]>([])
+  const [creatingPlan, setCreatingPlan] = useState(false)
+  const { user } = useAuthStore()
 
   const handlePrint = () => {
     window.print()
@@ -418,12 +422,18 @@ export default function ReportDetail() {
     if (!id) return
 
     let mounted = true
-    fetchPentestReport(id).then((report) => {
-      if (mounted && report) setPentestReport(report)
-    })
-    return () => {
-      mounted = false
+    const loadData = async () => {
+      const report = await fetchPentestReport(id)
+      if (mounted && report) {
+        setPentestReport(report)
+        // 检查是否已有整改计划
+        const plans = await governanceApi.getRemediationPlans()
+        const plan = plans.find(p => p.reportId === id)
+        if (mounted && plan) setAssociatedPlan(plan)
+      }
     }
+    loadData()
+    return () => { mounted = false }
   }, [id])
 
   if (pentestReport) {
@@ -445,16 +455,32 @@ export default function ReportDetail() {
       priority: findingPriorityLabel(finding.severity, index),
       action: findingActionText(finding, index),
       evidenceCount: structuredEvidence.filter((evidence) => evidence.findingId === finding.id).length,
-      remediationTask: getRemediationTaskByFinding(finding.id),
     }))
-
-    const handleCreateRemediation = (finding: Finding) => {
-      const task = createRemediationTask({
-        finding,
-        sourceReportId: pentestReport.id,
-        sourceReportName: pentestReport.name,
-      })
-      message.success(`已转入整改中心：${task.title}`)
+    // 依赖 remediationUpdateSignal 确保能重渲染
+    // 此行依赖以确保 re-render 触发
+    const handleGeneratePlan = async () => {
+      if (!pentestReport) return
+      setCreatingPlan(true)
+      try {
+        const plan = await governanceApi.createRemediationPlan({
+          reportId: pentestReport.id,
+          reportName: pentestReport.name,
+          target: pentestReport.target,
+          status: 'active',
+          ownerId: user?.id,
+          ownerName: user?.username,
+          createdById: user?.id || 'system',
+          createdByName: user?.username || 'system',
+        } as any)
+        
+        setAssociatedPlan(plan)
+        message.success('已成功创建整改计划，正在跳转...')
+        setTimeout(() => navigate(`/remediations/${plan.id}`), 1000)
+      } catch (error) {
+        message.error('生成整改计划失败')
+      } finally {
+        setCreatingPlan(false)
+      }
     }
 
     return (
@@ -468,8 +494,27 @@ export default function ReportDetail() {
             </div>
           </div>
           <Space>
-            <Button icon={<PrinterOutlined />} style={{ color: 'var(--text-secondary)' }} onClick={handlePrint}>打印</Button>
-            <Button icon={<DownloadOutlined />} type="primary" style={{ background: 'var(--color-primary)' }} onClick={handleExportPdf}>
+            {associatedPlan ? (
+              <Button 
+                type="primary" 
+                ghost 
+                icon={<ProjectOutlined />} 
+                onClick={() => navigate(`/remediations/${associatedPlan.id}`)}
+              >
+                查看整改进度
+              </Button>
+            ) : (
+              <Button 
+                type="primary" 
+                icon={<RocketOutlined />} 
+                onClick={handleGeneratePlan}
+                loading={creatingPlan}
+              >
+                生成整改计划
+              </Button>
+            )}
+            <Button icon={<PrinterOutlined />} onClick={handlePrint}>打印</Button>
+            <Button icon={<DownloadOutlined />} type="primary" onClick={handleExportPdf}>
               导出 PDF
             </Button>
           </Space>
@@ -589,7 +634,7 @@ export default function ReportDetail() {
           <section className={styles.reportBlock}>
             <div className={styles.blockTitle}>核心发现</div>
             <div className={styles.findingCards}>
-              {presentableFindings.map(({ finding, title, summary, priority, action, evidenceCount, remediationTask }, index) => {
+              {presentableFindings.map(({ finding, title, summary, priority, action, evidenceCount }, index) => {
                 const isExpanded = expandedIds.includes(finding.id)
                 const fullDesc = cleanAIText(finding.description || summary)
                 const hasMore = fullDesc.length > 180
@@ -642,13 +687,14 @@ export default function ReportDetail() {
                     </div>
 
                     <div className={styles.findingActions}>
-                      <div className={styles.findingPriority}>{remediationTask ? '已转整改' : priority}</div>
+                      <span className={styles.findingPriority}>排期: {priority}</span>
                       <Button
                         size="small"
-                        type={remediationTask ? 'default' : 'primary'}
-                        onClick={() => remediationTask ? navigate(`/remediations/${remediationTask.id}`) : handleCreateRemediation(finding)}
+                        type={associatedPlan ? 'link' : 'default'}
+                        onClick={() => associatedPlan ? navigate(`/remediations/${associatedPlan.id}`) : handleGeneratePlan()}
+                        disabled={creatingPlan}
                       >
-                        {remediationTask ? '查看整改' : '转入整改流程'}
+                        {associatedPlan ? '查看计划' : '转入整改'}
                       </Button>
                     </div>
                   </div>

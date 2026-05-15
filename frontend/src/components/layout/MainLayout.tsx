@@ -16,6 +16,7 @@ import {
   SafetyOutlined,
   PartitionOutlined,
   ToolOutlined,
+  BranchesOutlined,
 } from '@ant-design/icons'
 import { useAuthStore } from '@/stores/authStore'
 import styles from './MainLayout.module.css'
@@ -40,11 +41,6 @@ const menuItems = [
     label: 'AI 渗透中心',
   },
   {
-    key: '/blueprint',
-    icon: <PartitionOutlined />,
-    label: '产品整改蓝图',
-  },
-  {
     key: '/checklists',
     icon: <CheckSquareOutlined />,
     label: '检查模板库',
@@ -63,9 +59,25 @@ const menuItems = [
     type: 'divider' as const,
   },
   {
-    key: '/settings',
+    key: 'settings-group',
     icon: <SettingOutlined />,
     label: '系统设置',
+    children: [
+      {
+        key: '/settings',
+        label: '基本设置',
+      },
+      {
+        key: '/shannon',
+        icon: <BranchesOutlined />,
+        label: 'Shannon 工作台',
+      },
+      {
+        key: '/blueprint',
+        icon: <PartitionOutlined />,
+        label: '产品整改蓝图',
+      },
+    ]
   },
 ]
 
@@ -131,6 +143,7 @@ export default function MainLayout() {
         {/* 导航菜单 */}
         <Menu
           mode="inline"
+          defaultOpenKeys={['settings-group']}
           selectedKeys={[location.pathname]}
           items={menuItems}
           onClick={({ key }) => navigate(key)}

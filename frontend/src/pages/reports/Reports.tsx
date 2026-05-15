@@ -1,11 +1,11 @@
 /**
  * 报告中心列表页
  */
-import { Button, Table, Tag, Typography, Space } from 'antd'
-import { DownloadOutlined, EyeOutlined, FileTextOutlined } from '@ant-design/icons'
+import { Button, Table, Tag, Typography, Space, Popconfirm, message } from 'antd'
+import { EyeOutlined, FileTextOutlined, DeleteOutlined } from '@ant-design/icons'
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { fetchPentestReports, getPentestReports } from '@/utils/pentestReports'
+import { fetchPentestReports, getPentestReports, deletePentestReports } from '@/utils/pentestReports'
 import { resolveReportTemplate, type ReportTemplateId } from '@/utils/reportTemplates'
 import type { TargetType } from '@/types'
 import type { ConfidenceLevel, DataSourceKind } from '@/types/domain'
@@ -70,7 +70,9 @@ function getReportTemplateName(row: ReportRow) {
 export default function Reports() {
   const navigate = useNavigate()
   const [pentestReports, setPentestReports] = useState(() => getPentestReports())
-  const reports: ReportRow[] = [...pentestReports, ...MOCK_REPORTS]
+  const [selectedRowKeys, setSelectedRowKeys] = useState<React.Key[]>([])
+  const [deletedIds, setDeletedIds] = useState<string[]>([])
+  const reports: ReportRow[] = [...pentestReports, ...MOCK_REPORTS].filter(r => !deletedIds.includes(String(r.id)))
 
   useEffect(() => {
     let mounted = true
@@ -81,6 +83,30 @@ export default function Reports() {
       mounted = false
     }
   }, [])
+
+  const handleDelete = async (ids: string[]) => {
+    if (!ids || ids.length === 0) return
+    const hide = message.loading('正在删除...', 0)
+    try {
+      const stringIds = ids.map(String)
+      await deletePentestReports(stringIds)
+      setPentestReports((prev) => prev.filter(r => !stringIds.includes(String(r.id))))
+      setDeletedIds(prev => [...prev, ...stringIds])
+      setSelectedRowKeys([])
+      hide()
+      message.success('删除成功')
+    } catch (e) {
+      hide()
+      message.error('删除失败')
+    }
+  }
+
+  const rowSelection = {
+    selectedRowKeys,
+    onChange: (newSelectedRowKeys: React.Key[]) => {
+      setSelectedRowKeys(newSelectedRowKeys)
+    },
+  }
 
   const columns = [
     {
@@ -157,9 +183,17 @@ export default function Reports() {
           >
             查看
           </Button>
-          <Button type="link" size="small" icon={<DownloadOutlined />} style={{ color: 'var(--text-secondary)', padding: 0 }}>
-            下载
-          </Button>
+          <Popconfirm
+            title="确认删除该报告？"
+            onConfirm={() => handleDelete([record.id])}
+            okText="确认"
+            cancelText="取消"
+            placement="topRight"
+          >
+            <Button type="link" danger size="small" icon={<DeleteOutlined />} style={{ padding: 0 }}>
+              删除
+            </Button>
+          </Popconfirm>
         </Space>
       ),
     },
@@ -167,12 +201,34 @@ export default function Reports() {
 
   return (
     <div>
-      <div style={{ marginBottom: 24 }}>
-        <Title level={4} style={{ margin: 0, color: 'var(--text-primary)' }}>报告中心</Title>
-        <Text style={{ color: 'var(--text-secondary)', fontSize: 13 }}>查看、下载所有已完成的评估报告</Text>
+      <div style={{ marginBottom: 24, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div>
+          <Title level={4} style={{ margin: 0, color: 'var(--text-primary)' }}>报告中心</Title>
+          <Text style={{ color: 'var(--text-secondary)', fontSize: 13 }}>查看、下载所有已完成的评估报告</Text>
+        </div>
+        {selectedRowKeys.length > 0 && (
+          <Popconfirm
+            title={`确认删除选中的 ${selectedRowKeys.length} 份报告？`}
+            onConfirm={() => handleDelete(selectedRowKeys as string[])}
+            okText="确认"
+            cancelText="取消"
+            placement="bottomRight"
+          >
+            <Button danger icon={<DeleteOutlined />}>
+              批量删除 ({selectedRowKeys.length})
+            </Button>
+          </Popconfirm>
+        )}
       </div>
       <div style={{ background: 'var(--bg-card)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 10, padding: 20 }}>
-        <Table dataSource={reports} columns={columns} rowKey="id" pagination={false} size="middle" />
+        <Table 
+          rowSelection={rowSelection} 
+          dataSource={reports} 
+          columns={columns} 
+          rowKey="id" 
+          pagination={{ pageSize: 10 }} 
+          size="middle" 
+        />
       </div>
     </div>
   )

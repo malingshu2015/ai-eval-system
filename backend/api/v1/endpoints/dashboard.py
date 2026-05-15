@@ -7,6 +7,7 @@ from core.database import get_db
 from model.evaluation import EvaluationSession, CheckResult, CheckResultStatus, SessionStatus
 from model.checklist import CheckItem, RiskLevel
 from model.user import User, UserRole
+from model.governance import PentestReport
 from core.deps import RequireAuditorOrAbove, get_current_user
 from schema.dashboard import DashboardStatsResponse, SummaryStat, RiskDistribution, RecentFinding
 
@@ -51,6 +52,29 @@ async def get_dashboard_stats(
         risk_res = await db.execute(risk_stmt)
         risk_map = {str(row[0]): row[1] for row in risk_res}
 
+        # 2.5 渗透测试报告统计 (Sprint 7.5)
+        pentest_stmt = select(
+            func.count(PentestReport.id),
+            func.sum(PentestReport.critical),
+            func.sum(PentestReport.high),
+            func.sum(PentestReport.medium)
+        )
+        pentest_res = await db.execute(pentest_stmt)
+        p_count, p_critical, p_high, p_medium = pentest_res.fetchone() or (0, 0, 0, 0)
+        
+        p_count = p_count or 0
+        p_critical = p_critical or 0
+        p_high = p_high or 0
+        p_medium = p_medium or 0
+        
+        # 累加到全局统计
+        total_sessions += p_count
+        fail_results += (p_critical + p_high + p_medium)
+        
+        risk_map["critical"] = risk_map.get("critical", 0) + p_critical
+        risk_map["high"] = risk_map.get("high", 0) + p_high
+        risk_map["medium"] = risk_map.get("medium", 0) + p_medium
+
         # 3. 最近的发现
         recent_stmt = (
             select(CheckResult)
@@ -62,6 +86,11 @@ async def get_dashboard_stats(
         )
         recent_res = await db.execute(recent_stmt)
         recent_items = recent_res.scalars().all()
+
+        # 3.5 包含最近的渗透测试发现 (Sprint 7.5)
+        p_recent_stmt = select(PentestReport).order_by(PentestReport.created_at.desc()).limit(3)
+        p_recent_res = await db.execute(p_recent_stmt)
+        p_recent_reports = p_recent_res.scalars().all()
 
         summary = [
             SummaryStat(title="总评估任务", value=total_sessions, sub="系统累计运行", color="var(--color-primary)"),
@@ -88,6 +117,25 @@ async def get_dashboard_stats(
                 status=r.status.value if hasattr(r.status, 'value') else str(r.status),
                 date=r.session.created_at.strftime("%Y-%m-%d")
             ))
+
+        # 混合渗透测试发现
+        for pr in p_recent_reports:
+            # 仅取前 2 个严重发现
+            top_findings = pr.structured_findings[:2]
+            for f in top_findings:
+                findings.append(RecentFinding(
+                    key=f.get("id", f"p-{pr.id}"),
+                    code="PT",
+                    name=f.get("title", "未知漏洞"),
+                    target=pr.target,
+                    severity=f.get("severity", "medium"),
+                    status="fail",
+                    date=pr.date
+                ))
+
+        # 按照日期重新排序
+        findings.sort(key=lambda x: x.date, reverse=True)
+        findings = findings[:10]  # 只保留前 10 条
 
         pass_rate = 0
         total_valid = fail_results + pass_results

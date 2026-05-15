@@ -113,7 +113,11 @@ export default function NewEvaluationModal({ open, onClose, onCreated }: Props) 
       const res = await fetch('http://localhost:11434/api/tags')
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
       const data = await res.json()
-      setOllamaModels(data.models || [])
+      // NOTE: 只保留 deepseek 和 qwen3 系列模型，过滤掉其他无关模型
+      const filtered = (data.models || []).filter((m: OllamaModel) =>
+        m.name.startsWith('deepseek') || m.name.startsWith('qwen3')
+      )
+      setOllamaModels(filtered)
     } catch {
       setOllamaError('无法连接本地 Ollama 服务，请确认 Ollama 已启动（默认端口 11434）')
       setOllamaModels([])

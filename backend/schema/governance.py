@@ -6,7 +6,7 @@ from typing import Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from model.governance import AuditResult, RemediationStatus, ReportStatus, Severity
+from model.governance import AuditResult, PlanStatus, RemediationStatus, ReportStatus, Severity
 
 
 class CamelModel(BaseModel):
@@ -33,8 +33,39 @@ class AuditEventResponse(AuditEventCreate):
     updated_at: datetime = Field(alias="updatedAt")
 
 
+class RemediationPlanCreate(CamelModel):
+    id: str
+    report_id: str = Field(alias="reportId")
+    report_name: str = Field(alias="reportName")
+    target: str
+    status: PlanStatus = PlanStatus.ACTIVE
+    owner_id: Optional[str] = Field(default=None, alias="ownerId")
+    owner_name: Optional[str] = Field(default=None, alias="ownerName")
+    created_by_id: str = Field(alias="createdById")
+    created_by_name: str = Field(alias="createdByName")
+    due_date: Optional[str] = Field(default=None, alias="dueDate")
+    summary: Optional[str] = None
+
+
+class RemediationPlanUpdate(CamelModel):
+    status: Optional[PlanStatus] = None
+    owner_id: Optional[str] = Field(default=None, alias="ownerId")
+    owner_name: Optional[str] = Field(default=None, alias="ownerName")
+    due_date: Optional[str] = Field(default=None, alias="dueDate")
+    summary: Optional[str] = None
+
+
+class RemediationPlanResponse(RemediationPlanCreate):
+    total_tasks: int = Field(alias="totalTasks")
+    completed_tasks: int = Field(alias="completedTasks")
+    progress_percent: int = Field(alias="progressPercent")
+    created_at: datetime = Field(alias="createdAt")
+    updated_at: datetime = Field(alias="updatedAt")
+
+
 class RemediationTaskCreate(CamelModel):
     id: str
+    plan_id: Optional[str] = Field(default=None, alias="planId")
     finding_id: str = Field(alias="findingId")
     source_task_id: str = Field(alias="sourceTaskId")
     source_report_id: Optional[str] = Field(default=None, alias="sourceReportId")
@@ -44,21 +75,43 @@ class RemediationTaskCreate(CamelModel):
     description: Optional[str] = None
     owner_id: Optional[str] = Field(default=None, alias="ownerId")
     owner_name: Optional[str] = Field(default=None, alias="ownerName")
+    
+    # 任务指派字段
+    assignee_id: Optional[str] = Field(default=None, alias="assigneeId")
+    assignee_name: Optional[str] = Field(default=None, alias="assigneeName")
+    assigned_by_id: Optional[str] = Field(default=None, alias="assignedById")
+    assigned_by_name: Optional[str] = Field(default=None, alias="assignedByName")
+    assigned_at: Optional[str] = Field(default=None, alias="assignedAt")
+    
     due_date: Optional[str] = Field(default=None, alias="dueDate")
+    priority: str = "normal"
     status: RemediationStatus = RemediationStatus.OPEN
     action_plan: str = Field(alias="actionPlan")
     retest_result: Optional[str] = Field(default=None, alias="retestResult")
+    retest_evidence: Optional[str] = Field(default=None, alias="retestEvidence")
+    retest_at: Optional[str] = Field(default=None, alias="retestAt")
     closed_at: Optional[str] = Field(default=None, alias="closedAt")
+    closed_reason: Optional[str] = Field(default=None, alias="closedReason")
 
 
 class RemediationTaskUpdate(CamelModel):
+    plan_id: Optional[str] = Field(default=None, alias="planId")
     owner_id: Optional[str] = Field(default=None, alias="ownerId")
     owner_name: Optional[str] = Field(default=None, alias="ownerName")
+    assignee_id: Optional[str] = Field(default=None, alias="assigneeId")
+    assignee_name: Optional[str] = Field(default=None, alias="assigneeName")
+    assigned_by_id: Optional[str] = Field(default=None, alias="assignedById")
+    assigned_by_name: Optional[str] = Field(default=None, alias="assignedByName")
+    assigned_at: Optional[str] = Field(default=None, alias="assignedAt")
     due_date: Optional[str] = Field(default=None, alias="dueDate")
+    priority: Optional[str] = None
     status: Optional[RemediationStatus] = None
     action_plan: Optional[str] = Field(default=None, alias="actionPlan")
     retest_result: Optional[str] = Field(default=None, alias="retestResult")
+    retest_evidence: Optional[str] = Field(default=None, alias="retestEvidence")
+    retest_at: Optional[str] = Field(default=None, alias="retestAt")
     closed_at: Optional[str] = Field(default=None, alias="closedAt")
+    closed_reason: Optional[str] = Field(default=None, alias="closedReason")
 
 
 class RemediationTaskResponse(RemediationTaskCreate):
@@ -95,3 +148,23 @@ class PentestReportPayload(CamelModel):
 class PentestReportResponse(PentestReportPayload):
     created_at: datetime = Field(alias="createdAt")
     updated_at: datetime = Field(alias="updatedAt")
+
+
+class ShannonPlanCreate(CamelModel):
+    target_url: str = Field(alias="targetUrl")
+    source_path: str = Field(alias="sourcePath")
+    authorization_note: str = Field(alias="authorizationNote")
+    output_dir: str = Field(default="./shannon-reports", alias="outputDir")
+
+
+class ShannonPlanResponse(CamelModel):
+    id: str
+    target_url: str = Field(alias="targetUrl")
+    source_path: str = Field(alias="sourcePath")
+    output_dir: str = Field(alias="outputDir")
+    status: str
+    command: str
+    prerequisites: list[str]
+    execution_steps: list[str] = Field(alias="executionSteps")
+    next_action: str = Field(alias="nextAction")
+    created_at: str = Field(alias="createdAt")

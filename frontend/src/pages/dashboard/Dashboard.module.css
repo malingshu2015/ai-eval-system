@@ -10,6 +10,36 @@
   margin-bottom: 24px;
 }
 
+.strategyCard {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 24px;
+  padding: 16px 18px;
+  background: #ffffff;
+  border: 1px solid #dbe5f3;
+  border-radius: 14px;
+}
+
+.strategyCard > div {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.strategyIcon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  color: #0f766e;
+  background: #ecfdf5;
+  border-radius: 10px;
+  flex-shrink: 0;
+}
+
 /* 统计卡片 */
 .statCard {
   background: var(--bg-card);

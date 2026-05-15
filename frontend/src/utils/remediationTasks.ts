@@ -1,8 +1,6 @@
-import type { Finding, RemediationStatus, RemediationTask } from '@/types/domain'
+import type { Finding, PlanStatus, RemediationStatus, RemediationTask, RemediationPlan } from '@/types/domain'
 import { governanceApi } from '@/api/governance'
 import { recordAuditEvent } from './auditEvents'
-
-const STORAGE_KEY = 'ai-eval-remediation-tasks'
 
 export type CreateRemediationInput = {
   finding: Finding
@@ -12,61 +10,51 @@ export type CreateRemediationInput = {
   dueDate?: string
 }
 
-export function getRemediationTasks(): RemediationTask[] {
+export async function fetchRemediationTasks(planId?: string): Promise<RemediationTask[]> {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY)
-    if (!raw) return []
-    const parsed = JSON.parse(raw)
-    return Array.isArray(parsed) ? parsed : []
-  } catch {
+    return await governanceApi.getRemediationTasks(planId)
+  } catch (error) {
+    console.error('Failed to fetch remediation tasks:', error)
     return []
-  }
-}
-
-export function getRemediationTask(id: string): RemediationTask | undefined {
-  return getRemediationTasks().find((task) => task.id === id)
-}
-
-export function getRemediationTaskByFinding(findingId: string): RemediationTask | undefined {
-  return getRemediationTasks().find((task) => task.findingId === findingId)
-}
-
-export async function fetchRemediationTasks(): Promise<RemediationTask[]> {
-  try {
-    const tasks = await governanceApi.getRemediationTasks()
-    const localTasks = getRemediationTasks()
-    const mergedTasks = [
-      ...tasks,
-      ...localTasks.filter((task) => !tasks.some((item) => item.id === task.id)),
-    ]
-    saveRemediationTasks(mergedTasks)
-    return mergedTasks
-  } catch {
-    return getRemediationTasks()
   }
 }
 
 export async function fetchRemediationTask(id: string): Promise<RemediationTask | undefined> {
   try {
-    const task = await governanceApi.getRemediationTask(id)
-    const tasks = getRemediationTasks()
-    saveRemediationTasks([task, ...tasks.filter((item) => item.id !== task.id)])
-    return task
-  } catch {
-    return getRemediationTask(id)
+    return await governanceApi.getRemediationTask(id)
+  } catch (error) {
+    console.error('Failed to fetch remediation task:', error)
+    return undefined
   }
 }
 
-export function saveRemediationTasks(tasks: RemediationTask[]) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(tasks))
+export function getRemediationTaskByFinding(_findingId: string): RemediationTask | undefined {
+  return undefined
 }
 
-export function createRemediationTask(input: CreateRemediationInput): RemediationTask {
-  const existing = getRemediationTaskByFinding(input.finding.id)
-  if (existing) return existing
+// ---- 整改计划 (RemediationPlan) 支持 ----
 
-  const now = new Date().toLocaleString()
-  const task: RemediationTask = {
+export async function fetchRemediationPlans(): Promise<RemediationPlan[]> {
+  try {
+    return await governanceApi.getRemediationPlans()
+  } catch (error) {
+    console.error('Failed to fetch remediation plans:', error)
+    return []
+  }
+}
+
+export async function fetchRemediationPlan(id: string): Promise<RemediationPlan | undefined> {
+  try {
+    return await governanceApi.getRemediationPlan(id)
+  } catch (error) {
+    console.error('Failed to fetch remediation plan:', error)
+    return undefined
+  }
+}
+
+export async function createRemediationTask(input: CreateRemediationInput): Promise<RemediationTask> {
+  const now = new Date().toISOString()
+  const task: any = {
     id: `remediation-${Date.now()}`,
     findingId: input.finding.id,
     sourceTaskId: input.finding.taskId,
@@ -83,48 +71,40 @@ export function createRemediationTask(input: CreateRemediationInput): Remediatio
     updatedAt: now,
   }
 
-  saveRemediationTasks([task, ...getRemediationTasks()])
-  void governanceApi.createRemediationTask(task).catch(() => undefined)
+  const created = await governanceApi.createRemediationTask(task)
   recordAuditEvent({
     action: '创建整改项',
     targetType: 'remediation',
-    targetId: task.id,
-    targetName: task.title,
+    targetId: created.id,
+    targetName: created.title,
     result: 'success',
     summary: `风险发现 ${input.finding.id} 已转入整改中心。`,
   })
-  return task
+  return created
 }
 
-export function updateRemediationTask(id: string, updates: Partial<RemediationTask>): RemediationTask | undefined {
-  let updatedTask: RemediationTask | undefined
-  const tasks = getRemediationTasks().map((task) => {
-    if (task.id !== id) return task
-    updatedTask = {
-      ...task,
-      ...updates,
-      updatedAt: new Date().toLocaleString(),
-    }
-    return updatedTask
-  })
-  saveRemediationTasks(tasks)
-  if (updatedTask) {
-    void governanceApi.updateRemediationTask(updatedTask.id, updates).catch(() => undefined)
+export async function updateRemediationTask(id: string, updates: Partial<RemediationTask>): Promise<RemediationTask | undefined> {
+  try {
+    const updated = await governanceApi.updateRemediationTask(id, updates)
     recordAuditEvent({
       action: '更新整改项',
       targetType: 'remediation',
-      targetId: updatedTask.id,
-      targetName: updatedTask.title,
+      targetId: updated.id,
+      targetName: updated.title,
       result: 'success',
-      summary: `整改项状态更新为 ${remediationStatusLabel(updatedTask.status)}。`,
+      summary: `整改项状态更新为 ${remediationStatusLabel(updated.status)}。`,
     })
+    return updated
+  } catch (error) {
+    console.error('Failed to update remediation task:', error)
+    return undefined
   }
-  return updatedTask
 }
 
 export function remediationStatusLabel(status: RemediationStatus) {
   const labels: Record<RemediationStatus, string> = {
     open: '待处理',
+    assigned: '已指派',
     in_progress: '处理中',
     pending_retest: '待复测',
     fixed: '已修复',
@@ -137,11 +117,32 @@ export function remediationStatusLabel(status: RemediationStatus) {
 export function remediationStatusColor(status: RemediationStatus) {
   const colors: Record<RemediationStatus, string> = {
     open: 'red',
+    assigned: 'cyan',
     in_progress: 'blue',
     pending_retest: 'orange',
     fixed: 'green',
     closed: 'default',
     overdue: 'volcano',
+  }
+  return colors[status]
+}
+
+export function planStatusLabel(status: PlanStatus) {
+  const labels: Record<PlanStatus, string> = {
+    draft: '草稿',
+    active: '进行中',
+    completed: '已完成',
+    archived: '已归档',
+  }
+  return labels[status]
+}
+
+export function planStatusColor(status: PlanStatus) {
+  const colors: Record<PlanStatus, string> = {
+    draft: 'default',
+    active: 'processing',
+    completed: 'success',
+    archived: 'warning',
   }
   return colors[status]
 }

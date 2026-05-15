@@ -31,7 +31,16 @@ export type ConfidenceLevel = 'high' | 'medium' | 'low'
 
 export type ReportStatus = 'draft' | 'generated' | 'published' | 'archived'
 
-export type RemediationStatus = 'open' | 'in_progress' | 'pending_retest' | 'fixed' | 'closed' | 'overdue'
+export type RemediationStatus = 
+  | 'open' 
+  | 'assigned' 
+  | 'in_progress' 
+  | 'pending_retest' 
+  | 'fixed' 
+  | 'closed' 
+  | 'overdue'
+
+export type PlanStatus = 'draft' | 'active' | 'completed' | 'archived'
 
 export type Asset = {
   id: string
@@ -119,8 +128,28 @@ export type Report = {
   generatedAt: string
 }
 
+export type RemediationPlan = {
+  id: string
+  reportId: string
+  reportName: string
+  target: string
+  status: PlanStatus
+  ownerId?: string
+  ownerName?: string
+  createdById: string
+  createdByName: string
+  dueDate?: string
+  totalTasks: number
+  completedTasks: number
+  progressPercent: number
+  summary?: string
+  createdAt: string
+  updatedAt: string
+}
+
 export type RemediationTask = {
   id: string
+  planId?: string
   findingId: string
   sourceTaskId: string
   sourceReportId?: string
@@ -128,13 +157,27 @@ export type RemediationTask = {
   severity: Severity
   title: string
   description?: string
+  
+  // 历史兼容字段
   ownerId?: string
   ownerName?: string
+  
+  // 新指派字段
+  assigneeId?: string
+  assigneeName?: string
+  assignedById?: string
+  assignedByName?: string
+  assignedAt?: string
+  
   dueDate?: string
+  priority: string // urgent | high | normal | low
   status: RemediationStatus
   actionPlan: string
   retestResult?: string
+  retestEvidence?: string
+  retestAt?: string
   closedAt?: string
+  closedReason?: string
   createdAt: string
   updatedAt: string
 }

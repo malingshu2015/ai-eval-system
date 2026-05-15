@@ -11,6 +11,7 @@ import {
   PlusOutlined,
   ArrowRightOutlined,
   FireOutlined,
+  BranchesOutlined,
 } from '@ant-design/icons'
 import { useNavigate } from 'react-router-dom'
 import styles from './Dashboard.module.css'
@@ -49,8 +50,8 @@ const columns = [
   {
     title: '编号',
     dataIndex: 'code',
-    width: 80,
-    render: (v: string) => <Text code style={{ color: 'var(--text-secondary)' }}>{v}</Text>,
+    width: 100,
+    render: (v: string) => <Text code style={{ color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>{v}</Text>,
   },
   {
     title: '检查项',
@@ -119,6 +120,21 @@ export default function Dashboard() {
           style={{ background: 'var(--color-primary)' }}
         >
           新建评估
+        </Button>
+      </div>
+
+      <div className={styles.strategyCard}>
+        <div>
+          <span className={styles.strategyIcon}><BranchesOutlined /></span>
+          <div>
+            <Text strong style={{ color: 'var(--text-primary)' }}>Shannon 白盒渗透引擎评估</Text>
+            <Text style={{ display: 'block', color: 'var(--text-secondary)', fontSize: 13 }}>
+              在系统设置中管理 Shannon 白盒验证计划、授权范围和后续 Runner 接入路径。
+            </Text>
+          </div>
+        </div>
+        <Button type="primary" ghost onClick={() => navigate('/shannon')}>
+          进入工作台
         </Button>
       </div>
 

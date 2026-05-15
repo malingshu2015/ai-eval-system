@@ -137,6 +137,30 @@ const initialProviders: ModelProvider[] = [
     quota: 0,
     updatedAt: '2026-04-26 14:05',
   },
+  {
+    id: 'mp-4',
+    name: 'Claude 分析通道',
+    vendor: 'Anthropic',
+    baseUrl: 'https://api.anthropic.com/v1',
+    defaultModel: 'claude-3-5-sonnet-latest',
+    scenario: '深度分析 / 报告复核',
+    status: 'disabled',
+    latency: 0,
+    quota: 0,
+    updatedAt: '待配置',
+  },
+  {
+    id: 'mp-5',
+    name: 'Gemini 多模态通道',
+    vendor: 'Google Gemini',
+    baseUrl: 'https://generativelanguage.googleapis.com/v1beta',
+    defaultModel: 'gemini-1.5-pro',
+    scenario: '多模态证据分析',
+    status: 'disabled',
+    latency: 0,
+    quota: 0,
+    updatedAt: '待配置',
+  },
 ]
 
 const permissionRoles: PermissionRole[] = [
@@ -159,9 +183,13 @@ const localModelVendors = ['Ollama', 'Llama.cpp', 'LM Studio', 'LocalAI'] as con
 
 const vendorOptions = [
   { value: 'OpenAI', label: 'OpenAI' },
+  { value: 'Anthropic', label: 'Anthropic Claude' },
+  { value: 'Google Gemini', label: 'Google Gemini' },
   { value: 'DeepSeek', label: 'DeepSeek' },
   { value: '通义千问', label: '通义千问' },
   { value: '智谱', label: '智谱' },
+  { value: 'Moonshot', label: 'Moonshot Kimi' },
+  { value: '硅基流动', label: '硅基流动 SiliconFlow' },
   { value: 'Azure OpenAI', label: 'Azure OpenAI' },
   { value: 'OpenAI-Compatible', label: 'OpenAI-Compatible' },
   { value: 'Ollama', label: 'Ollama 本地模型' },
@@ -177,6 +205,26 @@ const localVendorHint: Record<string, string> = {
   'Llama.cpp': '适用于本地 llama.cpp 运行时，可直接选择或手动输入模型名称。',
   'LM Studio': '适用于本地 LM Studio 模型运行时，可直接选择或手动输入模型名称。',
   LocalAI: '适用于本地 LocalAI 模型运行时，可直接选择或手动输入模型名称。',
+}
+
+const cloudProviderDefaults: Record<string, { baseUrl: string; defaultModel: string }> = {
+  OpenAI: { baseUrl: 'https://api.openai.com/v1', defaultModel: 'gpt-4.1' },
+  Anthropic: { baseUrl: 'https://api.anthropic.com/v1', defaultModel: 'claude-3-5-sonnet-latest' },
+  'Google Gemini': { baseUrl: 'https://generativelanguage.googleapis.com/v1beta', defaultModel: 'gemini-1.5-pro' },
+  DeepSeek: { baseUrl: 'https://api.deepseek.com', defaultModel: 'deepseek-chat' },
+  通义千问: { baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1', defaultModel: 'qwen-plus' },
+  智谱: { baseUrl: 'https://open.bigmodel.cn/api/paas/v4', defaultModel: 'glm-4-plus' },
+  Moonshot: { baseUrl: 'https://api.moonshot.cn/v1', defaultModel: 'moonshot-v1-32k' },
+  硅基流动: { baseUrl: 'https://api.siliconflow.cn/v1', defaultModel: 'Qwen/Qwen2.5-72B-Instruct' },
+  'Azure OpenAI': { baseUrl: 'https://{resource}.openai.azure.com/openai/deployments/{deployment}', defaultModel: 'gpt-4.1' },
+  'OpenAI-Compatible': { baseUrl: 'https://api.example.com/v1', defaultModel: 'gpt-4.1' },
+  vLLM: { baseUrl: 'http://127.0.0.1:8001/v1', defaultModel: 'qwen2.5-72b-instruct' },
+  'Text Generation Inference': { baseUrl: 'http://127.0.0.1:8080/v1', defaultModel: 'tgi-model' },
+}
+
+/** 只保留 deepseek 和 qwen3 系列模型 */
+function isSuitableLocalModel(modelName: string) {
+  return modelName.startsWith('deepseek') || modelName.startsWith('qwen3')
 }
 
 const statusColor = {
@@ -523,7 +571,13 @@ export default function Settings() {
   function openProviderDrawer() {
     setDrawerOpen(true)
     setLocalModels([])
-    form.setFieldsValue({ vendor: 'OpenAI-Compatible', enabled: true, timeout: 60 })
+    form.setFieldsValue({
+      vendor: 'OpenAI-Compatible',
+      baseUrl: cloudProviderDefaults['OpenAI-Compatible'].baseUrl,
+      defaultModel: cloudProviderDefaults['OpenAI-Compatible'].defaultModel,
+      enabled: true,
+      timeout: 60,
+    })
   }
 
   function handleVendorChange(vendor: string) {
@@ -534,6 +588,13 @@ export default function Settings() {
       return
     }
     setLocalModels([])
+    const defaults = cloudProviderDefaults[vendor]
+    if (defaults) {
+      form.setFieldsValue({
+        baseUrl: defaults.baseUrl,
+        defaultModel: defaults.defaultModel,
+      })
+    }
   }
 
   async function loadLocalModels(vendor = selectedVendor) {
@@ -554,6 +615,7 @@ export default function Settings() {
       const models = (data.models ?? [])
         .map((model) => model.name)
         .filter((name): name is string => Boolean(name))
+        .filter(isSuitableLocalModel)
         .map((name) => ({ value: name, label: name }))
 
       setLocalModels(models)

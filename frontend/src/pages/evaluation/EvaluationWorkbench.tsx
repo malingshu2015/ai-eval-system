@@ -532,7 +532,7 @@ export default function EvaluationWorkbench() {
     activeItem.risk_level === 'high'
   ))
 
-  const handleCreateRemediation = () => {
+  const handleCreateRemediation = async () => {
     if (!activeItem || !activeResult || !sessionId) return
     const finding: Finding = {
       id: activeFindingId,
@@ -547,13 +547,18 @@ export default function EvaluationWorkbench() {
       remediationAdvice: activeItem.remediation || '补充整改方案后执行修复和复测。',
       createdAt: new Date().toLocaleString(),
     }
-    const task = createRemediationTask({
-      finding,
-      sourceReportId: sessionId,
-      sourceReportName: session?.name,
-    })
-    message.success(`已转入整改中心：${task.title}`)
-    navigate(`/remediations/${task.id}`)
+    try {
+      const task = await createRemediationTask({
+        finding,
+        sourceReportId: sessionId,
+        sourceReportName: session?.name,
+      })
+      message.success(`已转入整改中心：${task.title}`)
+      navigate(`/remediation-task/${task.id}`)
+    } catch (error) {
+      console.error('Failed to create remediation task:', error)
+      message.error('转入整改中心失败，请稍后重试')
+    }
   }
 
   // ===== Hooks 必须放在所有早期 return 之前 =====
