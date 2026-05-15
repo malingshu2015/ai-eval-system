@@ -41,16 +41,18 @@ logger = structlog.get_logger(__name__)
 async def lifespan(app: FastAPI):
     """应用生命周期管理：启动时初始化资源，关闭时清理"""
     logger.info("application_startup", env=settings.APP_ENV)
-    # NOTE: 开发环境自动建表，生产环境使用 Alembic 迁移
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
+    # NOTE: 开发环境保留自动建表，生产环境必须通过 Alembic 显式迁移。
+    if settings.APP_ENV == "development":
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
     
-    # 自动执行种子数据初始化（省去手动敲命令的麻烦）
-    try:
-        from scripts.seed import seed
-        await seed()
-    except Exception as e:
-        logger.error("seed_failed", error=str(e))
+    # NOTE: 仅开发环境允许启动时自动初始化数据，生产环境必须显式执行迁移和初始化命令。
+    if settings.APP_ENV == "development" and settings.SEED_ON_STARTUP:
+        try:
+            from scripts.seed import seed
+            await seed()
+        except Exception as e:
+            logger.error("seed_failed", error=str(e))
         
     yield
     logger.info("application_shutdown")

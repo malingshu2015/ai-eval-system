@@ -8,6 +8,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from sqlalchemy import select
 
+from core.config import settings
 from core.database import AsyncSessionLocal, engine
 from model.base import Base
 from model.checklist import CheckCategory, CheckItem, ChecklistTemplate, RiskLevel, TargetType
@@ -300,30 +301,33 @@ SEED_DATA = [
 
 
 from model.user import User
+from core.security import hash_password
 from scripts.seed_data import SEED_DATA_FULL as SEED_DATA
 
 async def seed():
-    print("检查表结构...")
-    # 表结构已经在 main.py 中初始化
+    print("同步数据库表结构...")
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
 
     print("开始写入种子数据...")
     async with AsyncSessionLocal() as session:
         # 1. 创建默认管理员用户（如果不存在）
-        stmt = select(User).where(User.username == "admin")
-        result = await session.execute(stmt)
-        if not result.scalars().first():
-            admin_user = User(
-                username="admin",
-                email="admin@example.com",
-                hashed_password="dummy",
-                is_active=True,
-                role="super_admin"
-            )
-            session.add(admin_user)
-            await session.flush()
+        if settings.SEED_DEFAULT_ADMIN:
+            stmt = select(User).where(User.username == settings.DEFAULT_ADMIN_USERNAME)
+            result = await session.execute(stmt)
+            if not result.scalars().first():
+                admin_user = User(
+                    username=settings.DEFAULT_ADMIN_USERNAME,
+                    email=settings.DEFAULT_ADMIN_EMAIL,
+                    hashed_password=hash_password(settings.DEFAULT_ADMIN_PASSWORD),
+                    is_active=True,
+                    role="super_admin"
+                )
+                session.add(admin_user)
+                await session.flush()
         
         # 2. 创建/更新模板
-        for tpl_data in SEED_DATA:
+        for tpl_data in SEED_DATA if settings.SEED_CHECKLIST_TEMPLATES else []:
             # 检查是否已存在
             stmt = select(ChecklistTemplate).where(ChecklistTemplate.name == tpl_data["name"])
             result = await session.execute(stmt)
@@ -385,7 +389,9 @@ async def seed():
                         item.check_method = item_data.get("check_method")
                         item.expected_result = item_data.get("expected_result")
                         item.remediation = item_data.get("remediation")
+                        item.references = item_data.get("references")
                         item.tool_ids = item_data.get("tool_ids")
+                        item.poc_code = item_data.get("poc_code")
                         item.sort_order = item_idx * 10
                     else:
                         item = CheckItem(
@@ -397,7 +403,9 @@ async def seed():
                             check_method=item_data.get("check_method"),
                             expected_result=item_data.get("expected_result"),
                             remediation=item_data.get("remediation"),
+                            references=item_data.get("references"),
                             tool_ids=item_data.get("tool_ids"),
+                            poc_code=item_data.get("poc_code"),
                             sort_order=item_idx * 10
                         )
                         session.add(item)

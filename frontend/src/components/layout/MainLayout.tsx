@@ -14,6 +14,9 @@ import {
   UserOutlined,
   BellOutlined,
   SafetyOutlined,
+  PartitionOutlined,
+  ToolOutlined,
+  BranchesOutlined,
 } from '@ant-design/icons'
 import { useAuthStore } from '@/stores/authStore'
 import styles from './MainLayout.module.css'
@@ -48,12 +51,33 @@ const menuItems = [
     label: '报告中心',
   },
   {
+    key: '/remediations',
+    icon: <ToolOutlined />,
+    label: '整改中心',
+  },
+  {
     type: 'divider' as const,
   },
   {
-    key: '/settings',
+    key: 'settings-group',
     icon: <SettingOutlined />,
     label: '系统设置',
+    children: [
+      {
+        key: '/settings',
+        label: '基本设置',
+      },
+      {
+        key: '/shannon',
+        icon: <BranchesOutlined />,
+        label: 'Shannon 工作台',
+      },
+      {
+        key: '/blueprint',
+        icon: <PartitionOutlined />,
+        label: '产品整改蓝图',
+      },
+    ]
   },
 ]
 
@@ -67,7 +91,12 @@ export default function MainLayout() {
     {
       key: 'profile',
       icon: <UserOutlined />,
-      label: '个人设置',
+      label: '账号设置',
+    },
+    {
+      key: 'switch-account',
+      icon: <UserOutlined />,
+      label: '切换账号',
     },
     { type: 'divider' as const },
     {
@@ -79,6 +108,13 @@ export default function MainLayout() {
   ]
 
   const handleUserMenuClick = ({ key }: { key: string }) => {
+    if (key === 'profile') {
+      navigate('/settings')
+    }
+    if (key === 'switch-account') {
+      logout()
+      navigate('/login')
+    }
     if (key === 'logout') {
       logout()
       navigate('/login')
@@ -107,6 +143,7 @@ export default function MainLayout() {
         {/* 导航菜单 */}
         <Menu
           mode="inline"
+          defaultOpenKeys={['settings-group']}
           selectedKeys={[location.pathname]}
           items={menuItems}
           onClick={({ key }) => navigate(key)}

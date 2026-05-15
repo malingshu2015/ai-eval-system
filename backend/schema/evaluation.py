@@ -17,6 +17,7 @@ class CheckResultBase(BaseModel):
     actual_severity: Optional[RiskLevel] = None
     raw_output: Optional[str] = None
     evidence: Optional[str] = None
+    last_poc_output: Optional[str] = None
     notes: Optional[str] = None
 
 
@@ -30,8 +31,31 @@ class CheckResultResponse(CheckResultBase):
     check_item_id: uuid.UUID
     checked_by_id: Optional[uuid.UUID] = None
     checked_at: Optional[datetime] = None
+    confidence_score: Optional[int] = None
+    confidence_level: Optional[str] = None
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class PocRunResponse(BaseModel):
+    status: str
+    task_id: Optional[str] = None
+    message: str
+
+
+class PocTaskStatusResponse(BaseModel):
+    task_id: str
+    task_state: str
+    session_id: uuid.UUID
+    check_item_id: uuid.UUID
+    result_status: CheckResultStatus
+    last_poc_output: Optional[str] = None
+    confidence_score: Optional[int] = None
+    confidence_level: Optional[str] = None
+    diagnosis_code: Optional[str] = None
+    diagnosis_message: Optional[str] = None
+    exit_code: Optional[int] = None
+    message: Optional[str] = None
 
 
 class EvaluationSessionBase(BaseModel):

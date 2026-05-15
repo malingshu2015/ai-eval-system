@@ -1,0 +1,355 @@
+.container {
+  max-width: 1440px;
+  margin: 0 auto;
+}
+
+.pageHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+.title {
+  margin: 0 !important;
+  color: var(--text-primary) !important;
+}
+
+.subtitle {
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.overviewGrid {
+  margin-bottom: 16px;
+}
+
+.sourceAlert {
+  margin-bottom: 16px;
+  border-radius: 10px;
+}
+
+.metricPanel {
+  min-height: 104px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 18px;
+  background: var(--bg-card);
+  border: 1px solid var(--bg-border);
+  border-radius: 12px;
+  box-shadow: var(--shadow-card);
+}
+
+.metricPanel > span {
+  width: 42px;
+  height: 42px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 10px;
+  color: var(--color-primary);
+  background: var(--color-primary-light);
+  font-size: 20px;
+}
+
+.metricPanel strong {
+  display: block;
+  line-height: 1.1;
+  color: var(--text-primary);
+  font-size: 28px;
+  font-weight: 750;
+}
+
+.metricPanel span {
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.controlBar {
+  position: sticky;
+  top: -24px;
+  z-index: 2;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  padding: 12px;
+  margin-bottom: 16px;
+  background: rgba(244, 247, 251, 0.92);
+  border: 1px solid var(--bg-border);
+  border-radius: 12px;
+  backdrop-filter: blur(16px);
+}
+
+.segmented {
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+.defaultModel {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 280px;
+  justify-content: flex-end;
+  color: var(--text-secondary);
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.defaultModel :global(.anticon) {
+  color: var(--color-primary);
+}
+
+.section {
+  background: var(--bg-card);
+  border: 1px solid var(--bg-border);
+  border-radius: 12px;
+  padding: 18px;
+  box-shadow: var(--shadow-card);
+}
+
+.sectionHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 18px;
+}
+
+.sectionHeader h2 {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: 0;
+}
+
+.sectionHeader p {
+  margin: 4px 0 0;
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.primaryCell,
+.userCell {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.primaryCell > div,
+.userCell > div,
+.roleCell {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.providerIcon {
+  width: 34px;
+  height: 34px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  border-radius: 9px;
+  color: #0f766e;
+  background: #ccfbf1;
+}
+
+.userCell > span {
+  width: 34px;
+  height: 34px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  border-radius: 50%;
+  color: #ffffff;
+  background: linear-gradient(135deg, #2563eb, #0f766e);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.quotaCell {
+  display: grid;
+  grid-template-columns: minmax(70px, 1fr) 52px;
+  align-items: center;
+  gap: 8px;
+}
+
+.quotaTrack {
+  height: 6px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #e2e8f0;
+}
+
+.quotaTrack span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #2563eb, #0f766e);
+}
+
+.roleCell {
+  max-width: 260px;
+}
+
+.roleAssign {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.userSummary {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px;
+  background: #f8fafc;
+  border: 1px solid var(--bg-border);
+  border-radius: 10px;
+}
+
+.userSummary > span {
+  width: 38px;
+  height: 38px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  border-radius: 50%;
+  color: #ffffff;
+  background: linear-gradient(135deg, #2563eb, #0f766e);
+  font-weight: 700;
+}
+
+.userSummary > div {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+}
+
+.roleHint {
+  padding: 10px 12px;
+  color: var(--text-secondary);
+  background: var(--color-primary-light);
+  border: 1px solid #bfdbfe;
+  border-radius: 8px;
+  font-size: 13px;
+}
+
+.localRuntimePanel {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 18px;
+  padding: 12px;
+  background: #f0fdfa;
+  border: 1px solid #99f6e4;
+  border-radius: 10px;
+}
+
+.localRuntimePanel > div {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.localModelTip {
+  padding: 8px 12px;
+  color: var(--text-secondary);
+  border-top: 1px solid var(--bg-border);
+  font-size: 12px;
+}
+
+.baselineList {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.baselineItem {
+  display: grid;
+  grid-template-columns: 72px minmax(0, 1fr);
+  align-items: flex-start;
+  gap: 12px;
+  padding: 12px;
+  background: #f8fafc;
+  border: 1px solid var(--bg-border);
+  border-radius: 8px;
+}
+
+.baselineItem > div {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.policyPanel {
+  min-height: 220px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 18px;
+  background: #f8fafc;
+  border: 1px solid var(--bg-border);
+  border-radius: 10px;
+}
+
+.policyPanel h3 {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 15px;
+}
+
+.policyPanel label {
+  display: grid;
+  grid-template-columns: 132px minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+:global(.ant-table-wrapper .ant-table) {
+  background: transparent;
+}
+
+:global(.ant-table-wrapper .ant-table-thead > tr > th) {
+  font-size: 12px;
+  font-weight: 650;
+}
+
+:global(.ant-segmented .ant-segmented-item-label) {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+@media (max-width: 900px) {
+  .pageHeader,
+  .controlBar,
+  .sectionHeader {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .defaultModel {
+    min-width: 0;
+    justify-content: flex-start;
+    white-space: normal;
+  }
+
+  .policyPanel label {
+    grid-template-columns: 1fr;
+  }
+}

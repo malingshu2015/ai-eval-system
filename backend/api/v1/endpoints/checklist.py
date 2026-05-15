@@ -1,5 +1,5 @@
 """
-Checklist 模板端点
+Checklist 模板端点（Sprint 7.3：已接入接口级 RBAC 权限校验）
 """
 import uuid
 from typing import List
@@ -10,15 +10,16 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from core.database import get_db
+from core.deps import RequireLogin, RequireWriter
 from model.checklist import CheckCategory, CheckItem, ChecklistTemplate
 from schema.checklist import ChecklistTemplateResponse, ChecklistTemplateCreate
 
 router = APIRouter()
 
 
-@router.get("", response_model=List[ChecklistTemplateResponse])
+@router.get("", response_model=List[ChecklistTemplateResponse], dependencies=[RequireLogin])
 async def list_templates(db: AsyncSession = Depends(get_db)):
-    """获取所有 Checklist 模板（包含分类和检查项）"""
+    """获取所有 Checklist 模板（需要登录）"""
     stmt = select(ChecklistTemplate).options(
         selectinload(ChecklistTemplate.categories).selectinload(CheckCategory.items)
     ).order_by(ChecklistTemplate.target_type, ChecklistTemplate.name)
@@ -28,9 +29,9 @@ async def list_templates(db: AsyncSession = Depends(get_db)):
     return templates
 
 
-@router.get("/{template_id}", response_model=ChecklistTemplateResponse)
+@router.get("/{template_id}", response_model=ChecklistTemplateResponse, dependencies=[RequireLogin])
 async def get_template(template_id: uuid.UUID, db: AsyncSession = Depends(get_db)):
-    """获取指定的 Checklist 模板详情"""
+    """获取指定的 Checklist 模板详情（需要登录）"""
     stmt = select(ChecklistTemplate).options(
         selectinload(ChecklistTemplate.categories).selectinload(CheckCategory.items)
     ).where(ChecklistTemplate.id == template_id)
@@ -42,12 +43,12 @@ async def get_template(template_id: uuid.UUID, db: AsyncSession = Depends(get_db
         raise HTTPException(status_code=404, detail="Template not found")
         
     return template
-@router.post("", response_model=ChecklistTemplateResponse)
+@router.post("", response_model=ChecklistTemplateResponse, dependencies=[RequireWriter])
 async def create_template(
-    template_in: ChecklistTemplateCreate, 
-    db: AsyncSession = Depends(get_db)
+    template_in: ChecklistTemplateCreate,
+    db: AsyncSession = Depends(get_db),
 ):
-    """创建新的 Checklist 模板"""
+    """创建新的 Checklist 模板（需要：eval_engineer 及以上角色）"""
     # 1. 创建模板主体
     db_template = ChecklistTemplate(
         name=template_in.name,

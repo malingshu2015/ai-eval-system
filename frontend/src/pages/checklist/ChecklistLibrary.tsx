@@ -6,6 +6,7 @@ import { Typography, Tag, Button, Row, Col, Spin, Empty, Drawer, List, Collapse,
 import { PlusOutlined } from '@ant-design/icons'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { checklistApi, type ChecklistTemplate } from '@/api/checklist'
+import { getRecommendedReportTemplate } from '@/utils/reportTemplates'
 
 const { Title, Text } = Typography
 
@@ -13,6 +14,18 @@ const TYPE_COLOR: Record<string, string> = { llm: 'var(--color-primary)', agent:
 const TYPE_LABEL: Record<string, string> = { llm: 'AI 大模型', agent: 'AI Agent', webapp: 'Web 应用' }
 const RISK_COLORS: Record<string, string> = { critical: '#ff3b5c', high: '#ff6b35', medium: '#ffa500', low: '#22c55e', info: '#64748b' }
 const RISK_LABELS: Record<string, string> = { critical: '严重', high: '高危', medium: '中危', low: '低危', info: '信息' }
+
+function getPocCoverage(template: ChecklistTemplate) {
+  const items = template.categories.flatMap((cat) => cat.items)
+  const automated = items.filter((item) => Boolean(item.poc_code))
+  const total = items.length
+  return {
+    automated: automated.length,
+    manual: total - automated.length,
+    total,
+    percent: total === 0 ? 0 : Math.round((automated.length / total) * 100),
+  }
+}
 
 export default function ChecklistLibrary() {
   const [detailVisible, setDetailVisible] = useState(false)
@@ -128,6 +141,8 @@ export default function ChecklistLibrary() {
         <Row gutter={[16, 16]}>
           {templates.map((t) => {
             const count = t.categories.reduce((acc, cat) => acc + cat.items.length, 0)
+            const reportTemplate = getRecommendedReportTemplate(t.target_type)
+            const coverage = getPocCoverage(t)
             return (
               <Col xs={24} md={12} lg={8} key={t.id}>
                 <div style={{ background: 'var(--bg-card)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 10, padding: 20, height: '100%', display: 'flex', flexDirection: 'column' }}>
@@ -137,6 +152,22 @@ export default function ChecklistLibrary() {
                   </div>
                   <Title level={5} style={{ color: 'var(--text-primary)', margin: '0 0 8px' }}>{t.name}</Title>
                   <Text style={{ color: 'var(--text-secondary)', fontSize: 13, flex: 1 }}>{t.description}</Text>
+                  <div style={{ marginTop: 14, padding: '10px 12px', background: '#f8fafc', border: '1px solid #e5e7eb', borderRadius: 8 }}>
+                    <Text style={{ color: '#475569', fontSize: 12, display: 'block' }}>默认报告模板</Text>
+                    <Text style={{ color: 'var(--text-primary)', fontSize: 13, fontWeight: 600 }}>{reportTemplate.name}</Text>
+                  </div>
+                  <div style={{ marginTop: 10, padding: '10px 12px', background: '#f8fafc', border: '1px solid #e5e7eb', borderRadius: 8 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
+                      <Text style={{ color: '#475569', fontSize: 12 }}>自动 PoC 覆盖</Text>
+                      <Text style={{ color: '#0f172a', fontSize: 12, fontWeight: 700 }}>{coverage.percent}%</Text>
+                    </div>
+                    <div style={{ height: 6, background: '#e5e7eb', borderRadius: 999, overflow: 'hidden' }}>
+                      <div style={{ width: `${coverage.percent}%`, height: '100%', background: '#2563eb' }} />
+                    </div>
+                    <Text style={{ color: '#64748b', fontSize: 12, display: 'block', marginTop: 8 }}>
+                      {coverage.automated} 项自动 PoC · {coverage.manual} 项手工检查
+                    </Text>
+                  </div>
                   
                   <div style={{ marginTop: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <Text style={{ color: 'var(--color-primary)', fontSize: 13 }}>{t.categories.length} 个分类 · {count} 个检查项</Text>
@@ -169,6 +200,32 @@ export default function ChecklistLibrary() {
                 <Tag color={TYPE_COLOR[selectedTemplate.target_type]}>{TYPE_LABEL[selectedTemplate.target_type]}</Tag>
                 {selectedTemplate.is_builtin && <Tag>内置系统级模板</Tag>}
               </div>
+              {(() => {
+                const coverage = getPocCoverage(selectedTemplate)
+                return (
+                  <div style={{ marginTop: 16, padding: 16, background: '#f8fafc', border: '1px solid #e5e7eb', borderRadius: 10 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                      <Text style={{ color: '#475569', fontSize: 12 }}>自动 PoC 覆盖</Text>
+                      <Tag color={coverage.percent >= 50 ? 'blue' : 'default'}>{coverage.automated}/{coverage.total}</Tag>
+                    </div>
+                    <div style={{ height: 8, background: '#e5e7eb', borderRadius: 999, overflow: 'hidden' }}>
+                      <div style={{ width: `${coverage.percent}%`, height: '100%', background: '#2563eb' }} />
+                    </div>
+                    <Text style={{ color: '#64748b', display: 'block', marginTop: 8, fontSize: 13 }}>
+                      已支持自动执行的检查项会在评估工作台显示“自动 PoC”，其余检查项仍按手工 SOP 录入。
+                    </Text>
+                  </div>
+                )
+              })()}
+              <div style={{ marginTop: 16, padding: 16, background: 'var(--bg-card)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 10 }}>
+                <Text style={{ color: 'var(--text-secondary)', fontSize: 12, display: 'block', marginBottom: 6 }}>推荐报告模板</Text>
+                <Text style={{ color: 'var(--text-primary)', fontWeight: 700 }}>
+                  {getRecommendedReportTemplate(selectedTemplate.target_type).name}
+                </Text>
+                <Text style={{ color: 'var(--text-secondary)', display: 'block', marginTop: 6, fontSize: 13 }}>
+                  {getRecommendedReportTemplate(selectedTemplate.target_type).description}
+                </Text>
+              </div>
             </div>
 
             <Collapse
@@ -185,9 +242,12 @@ export default function ChecklistLibrary() {
                       <List.Item style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
                         <List.Item.Meta
                           title={
-                            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
                               <Text style={{ color: 'var(--text-primary)' }}>{item.code} {item.name}</Text>
-                              <Badge color={RISK_COLORS[item.risk_level] || '#64748b'} text={<span style={{ color: 'var(--text-secondary)', fontSize: 12 }}>{RISK_LABELS[item.risk_level]}</span>} />
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+                                {item.poc_code ? <Tag color="blue">自动 PoC</Tag> : <Tag>手工</Tag>}
+                                <Badge color={RISK_COLORS[item.risk_level] || '#64748b'} text={<span style={{ color: 'var(--text-secondary)', fontSize: 12 }}>{RISK_LABELS[item.risk_level]}</span>} />
+                              </div>
                             </div>
                           }
                           description={<Text style={{ color: 'var(--text-secondary)', fontSize: 13 }}>{item.description}</Text>}

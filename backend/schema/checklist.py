@@ -19,6 +19,7 @@ class CheckItemBase(BaseModel):
     remediation: Optional[str] = None
     references: Optional[str] = None
     tool_ids: Optional[str] = None
+    poc_code: Optional[str] = None
     sort_order: int = 0
     is_active: bool = True
 

@@ -1,23 +1,112 @@
 /**
  * 报告中心列表页
  */
-import { Button, Table, Tag, Typography, Space } from 'antd'
-import { DownloadOutlined, EyeOutlined, FileTextOutlined } from '@ant-design/icons'
+import { Button, Table, Tag, Typography, Space, Popconfirm, message } from 'antd'
+import { EyeOutlined, FileTextOutlined, DeleteOutlined } from '@ant-design/icons'
+import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { fetchPentestReports, getPentestReports, deletePentestReports } from '@/utils/pentestReports'
+import { resolveReportTemplate, type ReportTemplateId } from '@/utils/reportTemplates'
+import type { TargetType } from '@/types'
+import type { ConfidenceLevel, DataSourceKind } from '@/types/domain'
 
 const { Title, Text } = Typography
 
 const MOCK_REPORTS = [
-  { id: '1', name: 'GPT-4o 安全评估报告', session: 'GPT-4o 安全评估 #001', type: 'llm', date: '2026-04-21', critical: 2, high: 1, medium: 3, passRate: 61 },
-  { id: '2', name: 'Code Agent 工具安全测试报告', session: 'Code Agent 工具安全测试', type: 'agent', date: '2026-04-20', critical: 0, high: 1, medium: 2, passRate: 83 },
-  { id: '3', name: 'AI 平台渗透测试报告', session: '内部 AI 平台渗透测试', type: 'webapp', date: '2026-04-18', critical: 1, high: 2, medium: 1, passRate: 72 },
+  { id: '1', name: 'GPT-4o 安全评估报告', session: 'GPT-4o 安全评估 #001', type: 'llm', reportTemplate: 'llm-security', reportVersion: 1, reviewConfidence: 'medium', dataSource: 'demo', date: '2026-04-21', critical: 2, high: 1, medium: 3, passRate: 61 },
+  { id: '2', name: 'Code Agent 工具安全测试报告', session: 'Code Agent 工具安全测试', type: 'agent', reportTemplate: 'agent-security', reportVersion: 1, reviewConfidence: 'high', dataSource: 'demo', date: '2026-04-20', critical: 0, high: 1, medium: 2, passRate: 83 },
+  { id: '3', name: 'AI 平台渗透测试报告', session: '内部 AI 平台渗透测试', type: 'webapp', reportTemplate: 'web-pentest', reportVersion: 1, reviewConfidence: 'medium', dataSource: 'demo', date: '2026-04-18', critical: 1, high: 2, medium: 1, passRate: 72 },
 ]
 
-const TYPE_COLOR: Record<string, string> = { llm: 'var(--color-primary)', agent: '#8b5cf6', webapp: '#06b6d4' }
-const TYPE_LABEL: Record<string, string> = { llm: 'AI 大模型', agent: 'AI Agent', webapp: 'Web 应用' }
+const TYPE_COLOR: Record<string, string> = { llm: 'var(--color-primary)', agent: '#8b5cf6', webapp: '#06b6d4', pentest: '#08979c' }
+const TYPE_LABEL: Record<string, string> = { llm: 'AI 大模型', agent: 'AI Agent', webapp: 'Web 应用', pentest: '渗透测试' }
+
+type ReportRow = typeof MOCK_REPORTS[0] | ReturnType<typeof getPentestReports>[0]
+
+const DATA_SOURCE_LABEL: Record<DataSourceKind, string> = {
+  tool: '真实工具',
+  ai_inferred: 'AI 推断',
+  manual: '人工录入',
+  demo: '演示数据',
+}
+
+const DATA_SOURCE_COLOR: Record<DataSourceKind, string> = {
+  tool: 'green',
+  ai_inferred: 'orange',
+  manual: 'blue',
+  demo: 'default',
+}
+
+function getReportVersion(row: ReportRow) {
+  return 'reportVersion' in row && row.reportVersion ? row.reportVersion : 1
+}
+
+function getReviewConfidence(row: ReportRow): ConfidenceLevel | undefined {
+  if ('reviewResult' in row && row.reviewResult?.overallConfidence) return row.reviewResult.overallConfidence
+  if ('review' in row && row.review?.overallConfidence) return row.review.overallConfidence
+  if ('reviewConfidence' in row) return row.reviewConfidence as ConfidenceLevel
+  return undefined
+}
+
+function getReviewStatus(row: ReportRow) {
+  const confidence = getReviewConfidence(row)
+  if (!confidence) return { label: '未复核', color: 'default' }
+  if (confidence === 'high') return { label: '高可信', color: 'green' }
+  if (confidence === 'medium') return { label: '中可信', color: 'orange' }
+  return { label: '低可信', color: 'red' }
+}
+
+function getDataSource(row: ReportRow): DataSourceKind {
+  if ('dataSource' in row && row.dataSource) return row.dataSource as DataSourceKind
+  return 'demo'
+}
+
+function getReportTemplateName(row: ReportRow) {
+  const targetType = row.type === 'pentest' ? 'webapp' : row.type as TargetType
+  const templateId = 'reportTemplate' in row ? row.reportTemplate as ReportTemplateId | undefined : 'web-pentest'
+  return resolveReportTemplate(targetType, templateId).shortName
+}
 
 export default function Reports() {
   const navigate = useNavigate()
+  const [pentestReports, setPentestReports] = useState(() => getPentestReports())
+  const [selectedRowKeys, setSelectedRowKeys] = useState<React.Key[]>([])
+  const [deletedIds, setDeletedIds] = useState<string[]>([])
+  const reports: ReportRow[] = [...pentestReports, ...MOCK_REPORTS].filter(r => !deletedIds.includes(String(r.id)))
+
+  useEffect(() => {
+    let mounted = true
+    fetchPentestReports().then((items) => {
+      if (mounted) setPentestReports(items)
+    })
+    return () => {
+      mounted = false
+    }
+  }, [])
+
+  const handleDelete = async (ids: string[]) => {
+    if (!ids || ids.length === 0) return
+    const hide = message.loading('正在删除...', 0)
+    try {
+      const stringIds = ids.map(String)
+      await deletePentestReports(stringIds)
+      setPentestReports((prev) => prev.filter(r => !stringIds.includes(String(r.id))))
+      setDeletedIds(prev => [...prev, ...stringIds])
+      setSelectedRowKeys([])
+      hide()
+      message.success('删除成功')
+    } catch (e) {
+      hide()
+      message.error('删除失败')
+    }
+  }
+
+  const rowSelection = {
+    selectedRowKeys,
+    onChange: (newSelectedRowKeys: React.Key[]) => {
+      setSelectedRowKeys(newSelectedRowKeys)
+    },
+  }
 
   const columns = [
     {
@@ -36,10 +125,35 @@ export default function Reports() {
       render: (v: string) => <Tag color={TYPE_COLOR[v]} style={{ borderRadius: 100 }}>{TYPE_LABEL[v]}</Tag>,
     },
     { title: '关联评估', dataIndex: 'session', render: (v: string) => <Text style={{ color: 'var(--text-secondary)' }}>{v}</Text> },
+    {
+      title: '报告模板',
+      render: (_: unknown, record: ReportRow) => (
+        <Space size={4}>
+          <Tag style={{ borderRadius: 100, background: '#f8fafc', borderColor: '#e5e7eb', color: '#475569' }}>
+            {getReportTemplateName(record)}
+          </Tag>
+          <Tag color="blue" style={{ borderRadius: 100 }}>v{getReportVersion(record)}</Tag>
+        </Space>
+      ),
+    },
+    {
+      title: '复核状态',
+      render: (_: unknown, record: ReportRow) => {
+        const status = getReviewStatus(record)
+        return <Tag color={status.color} style={{ borderRadius: 100 }}>{status.label}</Tag>
+      },
+    },
+    {
+      title: '数据来源',
+      render: (_: unknown, record: ReportRow) => {
+        const source = getDataSource(record)
+        return <Tag color={DATA_SOURCE_COLOR[source]} style={{ borderRadius: 100 }}>{DATA_SOURCE_LABEL[source]}</Tag>
+      },
+    },
     { title: '生成日期', dataIndex: 'date', render: (v: string) => <Text style={{ color: 'var(--text-muted)' }}>{v}</Text> },
     {
       title: '风险摘要',
-      render: (_: unknown, r: typeof MOCK_REPORTS[0]) => (
+      render: (_: unknown, r: ReportRow) => (
         <Space size={4}>
           {r.critical > 0 && <Tag color="#ff3b5c" style={{ borderRadius: 100 }}>严重 {r.critical}</Tag>}
           {r.high > 0 && <Tag color="#ff6b35" style={{ borderRadius: 100 }}>高危 {r.high}</Tag>}
@@ -58,7 +172,7 @@ export default function Reports() {
     },
     {
       title: '操作',
-      render: (_: unknown, record: typeof MOCK_REPORTS[0]) => (
+      render: (_: unknown, record: ReportRow) => (
         <Space>
           <Button
             type="link"
@@ -69,9 +183,17 @@ export default function Reports() {
           >
             查看
           </Button>
-          <Button type="link" size="small" icon={<DownloadOutlined />} style={{ color: 'var(--text-secondary)', padding: 0 }}>
-            下载
-          </Button>
+          <Popconfirm
+            title="确认删除该报告？"
+            onConfirm={() => handleDelete([record.id])}
+            okText="确认"
+            cancelText="取消"
+            placement="topRight"
+          >
+            <Button type="link" danger size="small" icon={<DeleteOutlined />} style={{ padding: 0 }}>
+              删除
+            </Button>
+          </Popconfirm>
         </Space>
       ),
     },
@@ -79,12 +201,34 @@ export default function Reports() {
 
   return (
     <div>
-      <div style={{ marginBottom: 24 }}>
-        <Title level={4} style={{ margin: 0, color: 'var(--text-primary)' }}>报告中心</Title>
-        <Text style={{ color: 'var(--text-secondary)', fontSize: 13 }}>查看、下载所有已完成的评估报告</Text>
+      <div style={{ marginBottom: 24, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div>
+          <Title level={4} style={{ margin: 0, color: 'var(--text-primary)' }}>报告中心</Title>
+          <Text style={{ color: 'var(--text-secondary)', fontSize: 13 }}>查看、下载所有已完成的评估报告</Text>
+        </div>
+        {selectedRowKeys.length > 0 && (
+          <Popconfirm
+            title={`确认删除选中的 ${selectedRowKeys.length} 份报告？`}
+            onConfirm={() => handleDelete(selectedRowKeys as string[])}
+            okText="确认"
+            cancelText="取消"
+            placement="bottomRight"
+          >
+            <Button danger icon={<DeleteOutlined />}>
+              批量删除 ({selectedRowKeys.length})
+            </Button>
+          </Popconfirm>
+        )}
       </div>
       <div style={{ background: 'var(--bg-card)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 10, padding: 20 }}>
-        <Table dataSource={MOCK_REPORTS} columns={columns} rowKey="id" pagination={false} size="middle" />
+        <Table 
+          rowSelection={rowSelection} 
+          dataSource={reports} 
+          columns={columns} 
+          rowKey="id" 
+          pagination={{ pageSize: 10 }} 
+          size="middle" 
+        />
       </div>
     </div>
   )

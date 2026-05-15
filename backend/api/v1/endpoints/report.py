@@ -7,13 +7,40 @@ import uuid
 from datetime import datetime
 
 from core.database import get_db
+from core.deps import RequireAuditorOrAbove, get_current_user, role_value
 from model.evaluation import EvaluationSession, CheckResult, CheckResultStatus
 from model.checklist import CheckItem
+from model.user import User, UserRole
+from service.evidence import get_result_confidence, parse_evidence
 
 router = APIRouter()
 
-@router.get("/{session_id}/report", response_class=HTMLResponse)
-async def generate_html_report(session_id: uuid.UUID, db: AsyncSession = Depends(get_db)):
+
+def _escape_html(value: str | None) -> str:
+    if not value:
+        return ""
+    return (
+        value.replace("&", "&amp;")
+        .replace("<", "&lt;")
+        .replace(">", "&gt;")
+        .replace('"', "&quot;")
+    )
+
+
+def _confidence_label(level: str) -> str:
+    return {
+        "high": "高可信",
+        "medium": "中可信",
+        "low": "低可信",
+        "unknown": "未评估",
+    }.get(level, level)
+
+@router.get("/{session_id}/report", response_class=HTMLResponse, dependencies=[RequireAuditorOrAbove])
+async def generate_html_report(
+    session_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
     try:
         # 1. 抓取完整会话数据 (确保预加载 check_item)
         stmt = (
@@ -28,6 +55,12 @@ async def generate_html_report(session_id: uuid.UUID, db: AsyncSession = Depends
         
         if not session:
             return HTMLResponse(content="<h1>错误：未找到对应的评估会话</h1>", status_code=404)
+
+        if (
+            role_value(current_user.role) != UserRole.SUPER_ADMIN.value
+            and session.assignee_id != current_user.id
+        ):
+            raise HTTPException(status_code=403, detail="权限不足：您不是该任务的负责人")
 
         # 2. 统计结果
         results = session.results or []
@@ -63,6 +96,10 @@ async def generate_html_report(session_id: uuid.UUID, db: AsyncSession = Depends
                 .badge-pass {{ background: #dcfce7; color: #166534; }}
                 .badge-fail {{ background: #fee2e2; color: #991b1b; }}
                 .badge-pending {{ background: #f1f5f9; color: #475569; }}
+                .confidence {{ display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 100px; font-size: 12px; background: #eff6ff; color: #1d4ed8; font-weight: 700; }}
+                .evidence-meta {{ display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-top: 12px; }}
+                .evidence-meta div {{ background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 10px; font-size: 12px; color: #475569; }}
+                .evidence-meta b {{ display: block; color: #0f172a; margin-bottom: 4px; }}
                 .evidence-box {{ background: #1e293b; color: #e2e8f0; padding: 15px; border-radius: 6px; font-family: monospace; font-size: 12px; white-space: pre-wrap; margin-top: 10px; border-left: 4px solid #3b82f6; overflow-x: auto; }}
                 .notes {{ color: #475569; font-style: italic; font-size: 14px; margin: 10px 0; padding: 8px 12px; background: #f8fafc; border-left: 3px solid #cbd5e1; }}
                 @media print {{ body {{ background: white; padding: 0; }} .report-card {{ box-shadow: none; border: none; }} }}
@@ -103,9 +140,20 @@ async def generate_html_report(session_id: uuid.UUID, db: AsyncSession = Depends
             
             badge_class = f"badge-{res.status.value if hasattr(res.status, 'value') else str(res.status)}"
             status_badge = f'<span class="badge {badge_class}">{res.status.value if hasattr(res.status, 'value') else str(res.status)}</span>'
-            
-            evidence_html = f'<div class="evidence-box"><b>取证日志:</b><br/>{res.raw_output}</div>' if res.raw_output else ""
-            notes_html = f'<div class="notes"><b>分析备注:</b> {res.notes}</div>' if res.notes else ""
+            confidence_score, confidence_level = get_result_confidence(res)
+            evidence = parse_evidence(res.evidence)
+            evidence_summary = evidence.get("summary") or "暂无结构化证据摘要"
+            evidence_source = evidence.get("source") or "manual"
+            evidence_exit_code = evidence.get("exitCode")
+            diagnosis_code = evidence.get("diagnosisCode") or "未记录"
+            diagnosis_message = evidence.get("diagnosisMessage") or "未记录"
+
+            raw_evidence = res.last_poc_output or res.raw_output
+            evidence_html = (
+                f'<div class="evidence-box"><b>取证日志:</b><br/>{_escape_html(raw_evidence)}</div>'
+                if raw_evidence else ""
+            )
+            notes_html = f'<div class="notes"><b>分析备注:</b> {_escape_html(res.notes)}</div>' if res.notes else ""
             
             risk_label = res.check_item.risk_level.value if hasattr(res.check_item.risk_level, 'value') else str(res.check_item.risk_level)
             
@@ -113,9 +161,15 @@ async def generate_html_report(session_id: uuid.UUID, db: AsyncSession = Depends
                 <div class="item-row">
                     <div class="item-header">
                         <div class="item-title">{res.check_item.code} - {res.check_item.name}</div>
-                        {status_badge}
+                        <div>{status_badge} <span class="confidence">{_confidence_label(confidence_level)} · {confidence_score}%</span></div>
                     </div>
                     <div style="font-size: 13px; color: #64748b;">风险等级: {risk_label}</div>
+                    <div class="evidence-meta">
+                        <div><b>证据来源</b>{_escape_html(str(evidence_source))}</div>
+                        <div><b>执行结果</b>{_escape_html(str(evidence_exit_code if evidence_exit_code is not None else '未记录'))}</div>
+                        <div><b>失败诊断</b>{_escape_html(str(diagnosis_code))} · {_escape_html(str(diagnosis_message))}</div>
+                        <div><b>证据摘要</b>{_escape_html(str(evidence_summary))}</div>
+                    </div>
                     {notes_html}
                     {evidence_html}
                 </div>
@@ -130,6 +184,8 @@ async def generate_html_report(session_id: uuid.UUID, db: AsyncSession = Depends
         </html>
         """
         return html_content
+    except HTTPException:
+        raise
     except Exception as e:
         import traceback
         error_msg = traceback.format_exc()

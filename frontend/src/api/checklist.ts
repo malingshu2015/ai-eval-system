@@ -10,6 +10,7 @@ export interface CheckItem {
   expected_result?: string
   remediation?: string
   tool_ids?: string
+  poc_code?: string
 }
 
 export interface CheckCategory {
